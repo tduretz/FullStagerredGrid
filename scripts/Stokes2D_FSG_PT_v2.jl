@@ -7,21 +7,18 @@ Dat = Float64  # Precision (double=Float64 or single=Float32)
 # Macros
 @views    ∂_∂x1(f1,f2,Δx,Δy,A) = (f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ A.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y1(f1,f2,Δx,Δy,C) = (f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy .+ C.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx
-
-@views    ∂_∂x(f,Δx,Δy,A) = (f[2:size(f,1),:] .- f[1:size(f,1)-1,:]) ./ Δx
-@views    ∂_∂y(f,Δx,Δy,C) = (f[:,2:size(f,2)] .- f[:,1:size(f,2)-1]) ./ Δy
 @views    av(A)      = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end])
 @views av_xa(A)      =  0.5*(A[1:end-1,:].+A[2:end,:])
 @views av_ya(A)      =  0.5*(A[:,1:end-1].+A[:,2:end]) 
 @views   avh(A)      = ( 0.25./A[1:end-1,1:end-1] .+ 0.25./A[1:end-1,2:end-0] .+ 0.25./A[2:end-0,1:end-1] .+ 0.25./A[2:end-0,2:end-0]).^(-1)
 @views   avWESN(A,B) = 0.25.*(A[:,1:end-1] .+ A[:,2:end-0] .+ B[1:end-1,:] .+ B[2:end-0,:])
-function PatchPlotMakie(vertx, verty, msh, v, xmin, xmax, ymin, ymax, x1, y1, x2, y2; cmap = :viridis, min_v = minimum(v), max_v = maximum(v))
+function PatchPlotMakie(vertx, verty, v, xmin, xmax, ymin, ymax, x1, y1, x2, y2; cmap = :viridis, min_v = minimum(v), max_v = maximum(v))
     f = CairoMakie.Figure()
-    ar = (maximum(msh.xv) - minimum(msh.xv)) / (maximum(msh.xv) - minimum(msh.yv))
+    ar = (xmax - xmin) / (ymax - ymin)
     CairoMakie.Axis(f[1, 1], aspect = ar)
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     # p = [Polygon( Point2f0[ (msh.xv[msh.e2v[i,j]], msh.yv[msh.e2v[i,j]]) for j=1:msh.nf_el] ) for i in 1:msh.nel]
-    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:msh.nf_el] ) for i in 1:msh.nel]
+    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(v)]
     CairoMakie.poly!(p, color = v, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
     # CairoMakie.scatter!(x1,y1, color=:white)
     # CairoMakie.scatter!(x2,y2, color=:white, marker=:xcross)
@@ -99,36 +96,18 @@ end
     dVxdτ_2     =   zeros(Dat, ncx+0, ncy+0)
     dVydτ_2     =   zeros(Dat, ncx+0, ncy+0)
     # Initialisation
-    xv_1, yv_1  = LinRange(xmin, xmax, ncx+1), LinRange(ymin, ymax, ncy+1)
-    xv_2, yv_2  = LinRange(xmin-Δx/2, xmax+Δx/2, ncx+2), LinRange(ymin-Δy/2, ymax+Δy/2, ncy+2)
-    xc_1, yc_1  = LinRange(xmin+Δx/2, xmax-Δx/2, ncx+0), LinRange(ymin, ymax, ncy+1)
-    xc_2, yc_2  = LinRange(xmin, xmax, ncx+1), LinRange(ymin+Δy/2, ymax-Δy/2, ncy+0)
-    (xv2_1, yv2_1) = ([x for x=xv_1,y=yv_1], [y for x=xv_1,y=yv_1])
-    (xv2_2, yv2_2) = ([x for x=xv_2,y=yv_2], [y for x=xv_2,y=yv_2])
-    (xc2_1, yc2_1) = ([x for x=xc_1,y=yc_1], [y for x=xc_1,y=yc_1])
-    (xc2_2, yc2_2) = ([x for x=xc_2,y=yc_2], [y for x=xc_2,y=yc_2])
-    numv  = reshape(1:(ncx+1)*(ncy+1), ncx+1, ncy+1)
-    xv, yv    = LinRange(xmin, xmax, ncx+1), LinRange(ymin, ymax, ncy+1)
-    xc, yc    = LinRange(xmin+Δx/2, xmax-Δx/2, ncx+1), LinRange(ymin+Δy/2, ymax-Δy/2, ncy+1)
-    (xv2,yv2) = ([x for x=xv,y=yv], [y for x=xv,y=yv])
-    (xc2,yc2) = ([x for x=xc,y=yc], [y for x=xc,y=yc])
+    xxv, yyv    = LinRange(xmin-Δx/2, xmax+Δx/2, 2ncx+3), LinRange(ymin-Δy/2, ymax+Δy/2, 2ncy+3)
+    (xv4,yv4) = ([x for x=xxv,y=yyv], [y for x=xxv,y=yyv])
     if adapt_mesh
-        # z0    = h.(xv2, slope, ord)
         m      = ymin
-        z0     = h_exp.(xv2, 1., 0.5, ymax)
-        yv2    = (yv2/ymin).*((-z0.+m)).+z0
-        z0     = h_exp.(xc2, 1., 0.5, ymax)
-        yc2    = (yc2/ymin).*((-z0.+m)).+z0
-        z0     = h_exp.(xv2_1, 1., 0.5, ymax)
-        yv2_1  = (yv2_1/ymin).*((-z0.+m)).+z0
-        z0     = h_exp.(xv2_2, 1., 0.5, ymax)
-        yv2_2  = (yv2_2/ymin).*((-z0.+m)).+z0
-        z0     = h_exp.(xc2_1, 1., 0.5, ymax)
-        yc2_1  = (yc2_1/ymin).*((-z0.+m)).+z0
-        z0     = h_exp.(xc2_2, 1., 0.5, ymax)
-        yc2_2  = (yc2_2/ymin).*((-z0.+m)).+z0
+        z0     = h_exp.(xv4, 1., 0.5, ymax)
+        yv4    = (yv4/ymin).*((-z0.+m)).+z0     
     end
-
+    # Grid subsets
+    xv2_1, yv2_1 = xv4[2:2:end-1,2:2:end-1], yv4[2:2:end-1,2:2:end-1]
+    xv2_2, yv2_2 = xv4[1:2:end-0,1:2:end-0], yv4[1:2:end-0,1:2:end-0]
+    xc2_1, yc2_1 = xv4[3:2:end-2,2:2:end-1], yv4[3:2:end-2,2:2:end-1]
+    xc2_2, yc2_2 = xv4[2:2:end-1,3:2:end-2], yv4[2:2:end-1,3:2:end-2]
     A = 0.
     C = 0.
 
@@ -215,18 +194,13 @@ end
     # p3 = heatmap( xc_1, yc_1, P_1', aspect_ratio=1, xlims=(-Lx/2, Lx/2), ylims=(-Ly/2, Ly/2), c=:turbo, title="P_1")
     # p4 = heatmap( xc_2, yc_2, P_2', aspect_ratio=1, xlims=(-Lx/2, Lx/2), ylims=(-Ly/2, Ly/2), c=:turbo, title="P_2")
     # display(plot(p1, p2, p3, p4))
-
     # Generate data
-    verts = [ numv[1:end-1,1:end-1][:] numv[2:end-0,1:end-1][:] numv[2:end-0,2:end-0][:] numv[1:end-1,2:end-0][:] ] 
-    vertx = [  xv2[1:end-1,1:end-1][:]  xv2[2:end-0,1:end-1][:]  xv2[2:end-0,2:end-0][:]  xv2[1:end-1,2:end-0][:] ] 
-    verty = [  yv2[1:end-1,1:end-1][:]  yv2[2:end-0,1:end-1][:]  yv2[2:end-0,2:end-0][:]  yv2[1:end-1,2:end-0][:] ] 
-
-    nel  = 4
-    nc   = ncx*ncy
-    v    = avWESN(P_1, P_2)[:]
-    msh  = (xv=xv2[:], yv=yv2[:], e2v=verts, nf_el=4, nel=nc )
-    PatchPlotMakie(vertx, verty, msh, v, minimum(xv), maximum(xv), minimum(yv), maximum(yv), xv2[:], yv2[:], xc2[:], yc2[:])
-
+    vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
+    verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
+    v     = avWESN(P_1, P_2)[:]
+    xc2   = avWESN(xc2_1, xc2_2)[:] 
+    yc2   = avWESN(yc2_1, yc2_2)[:]
+    PatchPlotMakie(vertx, verty, v, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:])
     return
 end
 
