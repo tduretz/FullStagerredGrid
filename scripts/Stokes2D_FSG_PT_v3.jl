@@ -53,12 +53,12 @@ end
     rad      = 0.5
     y0       = -2.
     g        = -1
-    adapt_mesh = true
+    adapt_mesh = false
     solve      = true
     # Numerics
     ncx, ncy = 51, 51    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
-    iterMax  = 1e4       # max number of iters
+    iterMax  = 1#1e4       # max number of iters
     nout     = 1000      # check frequency
     # Iterative parameters -------------------------------------------
     if adapt_mesh
@@ -83,20 +83,20 @@ end
     ε̇yy_1       =   zeros(Dat, ncx-0, ncy+1)
     ε̇xy_1       =   zeros(Dat, ncx-0, ncy+1)
     ∇v_1        =   zeros(Dat, ncx-0, ncy+1)
-    ε̇xx_2       =   zeros(Dat, ncx+1, ncy-0)
-    ε̇yy_2       =   zeros(Dat, ncx+1, ncy-0)
-    ε̇xy_2       =   zeros(Dat, ncx+1, ncy-0)
-    ∇v_2        =   zeros(Dat, ncx+1, ncy-0)
+    ε̇xx_2       =   zeros(Dat, ncx+1, ncy-0+1)
+    ε̇yy_2       =   zeros(Dat, ncx+1, ncy-0+1) #FS
+    ε̇xy_2       =   zeros(Dat, ncx+1, ncy-0+1)
+    ∇v_2        =   zeros(Dat, ncx+1, ncy-0+1)
     τxx_1       =   zeros(Dat, ncx-0, ncy+1)
     τyy_1       =   zeros(Dat, ncx-0, ncy+1)
     τxy_1       =   zeros(Dat, ncx-0, ncy+1)
     P_1         =   zeros(Dat, ncx-0, ncy+1)
     η_1         =   zeros(Dat, ncx-0, ncy+1)
-    τxx_2       =   zeros(Dat, ncx+1, ncy-0)
-    τyy_2       =   zeros(Dat, ncx+1, ncy-0)
-    τxy_2       =   zeros(Dat, ncx+1, ncy-0)
-    P_2         =   zeros(Dat, ncx+1, ncy-0)
-    η_2         =   zeros(Dat, ncx+1, ncy-0)
+    τxx_2       =   zeros(Dat, ncx+1, ncy-0+1)
+    τyy_2       =   zeros(Dat, ncx+1, ncy-0+1)
+    τxy_2       =   zeros(Dat, ncx+1, ncy-0+1)
+    P_2         =   zeros(Dat, ncx+1, ncy-0+1)
+    η_2         =   zeros(Dat, ncx+1, ncy-0+1)
     Rx_1        =   zeros(Dat, ncx+1, ncy+1)
     Ry_1        =   zeros(Dat, ncx+1, ncy+1)
     ρ_1         =   zeros(Dat, ncx+1, ncy+1)
@@ -130,7 +130,7 @@ end
     xv2_1, yv2_1 = xv4[2:2:end-1,2:2:end-1], yv4[2:2:end-1,2:2:end-1]
     xv2_2, yv2_2 = xv4[1:2:end-0,1:2:end-0], yv4[1:2:end-0,1:2:end-0]
     xc2_1, yc2_1 = xv4[3:2:end-2,2:2:end-1], yv4[3:2:end-2,2:2:end-1]
-    xc2_2, yc2_2 = xv4[2:2:end-1,3:2:end-2], yv4[2:2:end-1,3:2:end-2]
+    xc2_2, yc2_2 = xv4[2:2:end-1,3:2:end-2+2], yv4[2:2:end-1,3:2:end-2+2]
     Ac_1 = A[3:2:end-2,2:2:end-1]; Av_1 = A[2:2:end-1,2:2:end-1]
     Ac_2 = A[2:2:end-1,3:2:end-2]; Av_2 = A[1:2:end-0,1:2:end-0]
     Cc_1 = C[3:2:end-2,2:2:end-1]; Cv_1 = C[2:2:end-1,2:2:end-1]
@@ -148,9 +148,9 @@ end
     ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0)^2 .< rad] .= 2.
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))
-    η_2_sm    = zeros(size(η_2))
+    η_2_sm    = zeros(size(η_2,1), size(η_2,2)-1)
     η_1_sm   .= η_1
-    η_2_sm   .= η_2
+    η_2_sm   .= η_2[:,1:end-1]
     η_1_sm_c = av(η_1_sm)
     η_2_sm_c = av(η_2_sm)
     for it = 1:nsm
@@ -163,52 +163,52 @@ end
     Δτv_1  .= cfl .*ρ .*min(Δx,Δy)^2 ./ (0.50*(η_1_sm[1:end-1,2:end-1].+η_1_sm[2:end-0,2:end-1])) ./ 4.1 
     Δτv_2  .= cfl .*ρ .*min(Δx,Δy)^2 ./ (0.25*(η_1_sm[:,1:end-1].+η_1_sm[:,2:end-0].+η_2_sm[1:end-1,:].+η_2_sm[2:end-0,:])) ./ 4.1 
     κΔτp_1 .= cfl .* η_1 .* Δx ./ (xmax-xmin)
-    κΔτp_2 .= cfl .* η_2 .* Δx ./ (xmax-xmin)
+    κΔτp_2 .= cfl .* η_2[:,1:end-1] .* Δx ./ (xmax-xmin)
     if solve
     # PT loop
     it=1; iter=1; err=2*ε; err_evo1=[]; err_evo2=[];
     while (err>ε && iter<=iterMax)
         ∇v_1  .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,Ac_1) .+ ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,Cc_1) 
-        ∇v_2  .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,Ac_2) .+ ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,Cc_2) 
+        ∇v_2[:,1:end-1]  .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,Ac_2) .+ ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,Cc_2) 
         ε̇xx_1 .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,Ac_1) .- 1.0/3.0*∇v_1
         ε̇yy_1 .=  ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,Cc_1) .- 1.0/3.0*∇v_1
         ε̇xy_1 .= (∂_∂y(Vx_2[2:end-1,:],Vx_1,Δx,Δy,Cc_1) .+ ∂_∂x(Vy_1,Vy_2[2:end-1,:], Δx,Δy,Ac_1) ) / 2.
-        ε̇xx_2 .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,Ac_2) .- 1.0/3.0*∇v_2
-        ε̇yy_2 .=  ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,Cc_2) .- 1.0/3.0*∇v_2
-        ε̇xy_2 .= (∂_∂y(Vx_1,Vx_2[:,2:end-1],Δx,Δy,Cc_2) .+ ∂_∂x(Vy_2[:,2:end-1],Vy_1, Δx,Δy,Ac_2) ) / 2.
+        ε̇xx_2[:,1:end-1] .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,Ac_2) .- 1.0/3.0*∇v_2[:,1:end-1]
+        ε̇yy_2[:,1:end-1] .=  ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,Cc_2) .- 1.0/3.0*∇v_2[:,1:end-1]
+        ε̇xy_2[:,1:end-1] .= (∂_∂y(Vx_1,Vx_2[:,2:end-1],Δx,Δy,Cc_2) .+ ∂_∂x(Vy_2[:,2:end-1],Vy_1, Δx,Δy,Ac_2) ) / 2.
         τxx_1 .= 2.0 .* η_1 .* ε̇xx_1
         τxx_2 .= 2.0 .* η_2 .* ε̇xx_2
         τyy_1 .= 2.0 .* η_1 .* ε̇yy_1
         τyy_2 .= 2.0 .* η_2 .* ε̇yy_2
         τxy_1 .= 2.0 .* η_1 .* ε̇xy_1
         τxy_2 .= 2.0 .* η_2 .* ε̇xy_2
-        Rx_1[2:end-1,2:end-1] .= ∂_∂x(τxx_1[:,2:end-1],τxx_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-1]) .+ ∂_∂y(τxy_2[2:end-1,:],τxy_1[:,2:end-1],Δx,Δy,Cv_1[2:end-1,2:end-1]) .-  ∂_∂x(P_1[:,2:end-1],P_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-1])
-        Rx_2                  .= ∂_∂x(τxx_2,τxx_1,                      Δx,Δy,Av_2[2:end-1,2:end-1]) .+ ∂_∂y(τxy_1,τxy_2,                      Δx,Δy,Cv_2[2:end-1,2:end-1]) .-  ∂_∂x(P_2,P_1,                      Δx,Δy,Av_2[2:end-1,2:end-1]) 
-        Ry_1[2:end-1,2:end-1] .= ∂_∂y(τyy_2[2:end-1,:],τyy_1[:,2:end-1],Δx,Δy,Cv_1[2:end-1,2:end-1]) .+ ∂_∂x(τxy_1[:,2:end-1],τxy_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-1]) .-  ∂_∂y(P_2[2:end-1,:],P_1[:,2:end-1],Δx,Δy,Cv_1[2:end-1,2:end-1]) .+ ρ_1[2:end-1,2:end-1].*g
-        Ry_2                  .= ∂_∂y(τyy_1,τyy_2,                      Δx,Δy,Cv_2[2:end-1,2:end-1]) .+ ∂_∂x(τxy_2,τxy_1,                      Δx,Δy,Av_2[2:end-1,2:end-1]) .-  ∂_∂y(P_1,P_2,                      Δx,Δy,Cv_2[2:end-1,2:end-1]) .+ ρ_2.*g
-        Rp_1                  .= .-∇v_1
-        Rp_2                  .= .-∇v_2 
-        # Calculate rate update --------------------------------------
-        dVxdτ_1 .= (1-ρ) .* dVxdτ_1 .+ Rx_1
-        dVydτ_1 .= (1-ρ) .* dVydτ_1 .+ Ry_1
-        dVxdτ_2 .= (1-ρ) .* dVxdτ_2 .+ Rx_2
-        dVydτ_2 .= (1-ρ) .* dVydτ_2 .+ Ry_2
-        # Update velocity and pressure -------------------------------
-        Vx_1[2:end-1,2:end-1] .+= Δτv_1 ./ ρ .* dVxdτ_1[2:end-1,2:end-1]
-        Vy_1[2:end-1,2:end-1] .+= Δτv_1 ./ ρ .* dVydτ_1[2:end-1,2:end-1]
-        Vx_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVxdτ_2
-        Vy_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVydτ_2
-        P_1                   .+= κΔτp_1 .* Rp_1
-        P_2                   .+= κΔτp_2 .* Rp_2
-        # Convergence check
-        if mod(iter, nout)==0 || iter==1
-            norm_Rx = 0.5*( norm(Rx_1)/sqrt(length(Rx_1)) + norm(Rx_2)/sqrt(length(Rx_2)) )
-            norm_Ry = 0.5*( norm(Ry_1)/sqrt(length(Ry_1)) + norm(Ry_2)/sqrt(length(Ry_2)) )
-            norm_Rp = 0.5*( norm(Rp_1)/sqrt(length(Rp_1)) + norm(Rp_2)/sqrt(length(Rp_2)) )
-            @printf("it = %03d, iter = %04d, nRx=%1.3e nRy=%1.3e nRp=%1.3e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
-            if (isnan(norm_Rx) || isnan(norm_Ry) || isnan(norm_Rp)) error("NaN"); end
-            if (norm_Rx<tol && norm_Ry<tol && norm_Rp<tol) break; end
-        end
+        Rx_1[2:end-1,2:end-0] .= ∂_∂x(τxx_1[:,2:end-0],τxx_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-0]) .+ ∂_∂y(τxy_2[2:end-1,:],τxy_1[:,2:end-0],Δx,Δy,Cv_1[2:end-1,2:end-0]) .-  ∂_∂x(P_1[:,2:end-0],P_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-0])
+        Rx_2                  .= ∂_∂x(τxx_2[:,1:end-1],τxx_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) .+ ∂_∂y(τxy_1,τxy_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .-  ∂_∂x(P_2[:,1:end-1],P_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) 
+        Ry_1[2:end-1,2:end-0] .= ∂_∂y(τyy_2[2:end-1,:],τyy_1[:,2:end-0],Δx,Δy,Cv_1[2:end-1,2:end-0]) .+ ∂_∂x(τxy_1[:,2:end-0],τxy_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-0]) .-  ∂_∂y(P_2[2:end-1,:],P_1[:,2:end-0],Δx,Δy,Cv_1[2:end-1,2:end-0]) .+ ρ_1[2:end-1,2:end-0].*g
+        Ry_2                  .= ∂_∂y(τyy_1,τyy_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .+ ∂_∂x(τxy_2[:,1:end-1],τxy_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) .-  ∂_∂y(P_1,P_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .+ ρ_2.*g
+        # Rp_1                  .= .-∇v_1
+        # Rp_2                  .= .-∇v_2 
+        # # Calculate rate update --------------------------------------
+        # dVxdτ_1 .= (1-ρ) .* dVxdτ_1 .+ Rx_1
+        # dVydτ_1 .= (1-ρ) .* dVydτ_1 .+ Ry_1
+        # dVxdτ_2 .= (1-ρ) .* dVxdτ_2 .+ Rx_2
+        # dVydτ_2 .= (1-ρ) .* dVydτ_2 .+ Ry_2
+        # # Update velocity and pressure -------------------------------
+        # Vx_1[2:end-1,2:end-1] .+= Δτv_1 ./ ρ .* dVxdτ_1[2:end-1,2:end-1]
+        # Vy_1[2:end-1,2:end-1] .+= Δτv_1 ./ ρ .* dVydτ_1[2:end-1,2:end-1]
+        # Vx_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVxdτ_2
+        # Vy_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVydτ_2
+        # P_1                   .+= κΔτp_1 .* Rp_1
+        # P_2                   .+= κΔτp_2 .* Rp_2
+        # # Convergence check
+        # if mod(iter, nout)==0 || iter==1
+        #     norm_Rx = 0.5*( norm(Rx_1)/sqrt(length(Rx_1)) + norm(Rx_2)/sqrt(length(Rx_2)) )
+        #     norm_Ry = 0.5*( norm(Ry_1)/sqrt(length(Ry_1)) + norm(Ry_2)/sqrt(length(Ry_2)) )
+        #     norm_Rp = 0.5*( norm(Rp_1)/sqrt(length(Rp_1)) + norm(Rp_2)/sqrt(length(Rp_2)) )
+        #     @printf("it = %03d, iter = %04d, nRx=%1.3e nRy=%1.3e nRp=%1.3e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
+        #     if (isnan(norm_Rx) || isnan(norm_Ry) || isnan(norm_Rp)) error("NaN"); end
+        #     if (norm_Rx<tol && norm_Ry<tol && norm_Rp<tol) break; end
+        # end
         iter+=1; global itg=iter
     end
     end
@@ -221,9 +221,9 @@ end
     # Generate data
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    sol   = ( vx=Vx_2[2:end-1,2:end-1][:], vy=Vy_2[2:end-1,2:end-1][:], p=avWESN(P_1, P_2)[:])
-    xc2   = avWESN(xc2_1, xc2_2)[:] 
-    yc2   = avWESN(yc2_1, yc2_2)[:]
+    sol   = ( vx=Vx_2[2:end-1,2:end-1][:], vy=Vy_2[2:end-1,2:end-1][:], p=avWESN(P_1, P_2[:,1:end-1])[:])
+    xc2   = avWESN(xc2_1, xc2_2[:,1:end-1])[:] 
+    yc2   = avWESN(yc2_1, yc2_2[:,1:end-1])[:]
     PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:])
     return
 end
