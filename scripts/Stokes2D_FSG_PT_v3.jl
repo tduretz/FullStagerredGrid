@@ -58,7 +58,7 @@ end
     # Numerics
     ncx, ncy = 51, 51    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
-    iterMax  = 1#1e4       # max number of iters
+    iterMax  = 1e4       # max number of iters
     nout     = 1000      # check frequency
     # Iterative parameters -------------------------------------------
     if adapt_mesh
@@ -105,7 +105,7 @@ end
     ρ_2         =   zeros(Dat, ncx+0, ncy-0)
     Rp_1        =   zeros(Dat, ncx-0, ncy+1)
     Rp_2        =   zeros(Dat, ncx+1, ncy-0)
-    Δτv_1       =   zeros(Dat, ncx-1, ncy-1)
+    Δτv_1       =   zeros(Dat, ncx-1, ncy-0)
     Δτv_2       =   zeros(Dat, ncx-0, ncy-0)
     κΔτp_1      =   zeros(Dat, ncx-0, ncy+1)
     κΔτp_2      =   zeros(Dat, ncx+1, ncy-0)
@@ -160,7 +160,7 @@ end
         η_2_sm_c = av(η_2_sm)
     end
     # PT steps
-    Δτv_1  .= cfl .*ρ .*min(Δx,Δy)^2 ./ (0.50*(η_1_sm[1:end-1,2:end-1].+η_1_sm[2:end-0,2:end-1])) ./ 4.1 
+    Δτv_1  .= cfl .*ρ .*min(Δx,Δy)^2 ./ (0.50*(η_1_sm[1:end-1,2:end-0].+η_1_sm[2:end-0,2:end-0])) ./ 4.1 
     Δτv_2  .= cfl .*ρ .*min(Δx,Δy)^2 ./ (0.25*(η_1_sm[:,1:end-1].+η_1_sm[:,2:end-0].+η_2_sm[1:end-1,:].+η_2_sm[2:end-0,:])) ./ 4.1 
     κΔτp_1 .= cfl .* η_1 .* Δx ./ (xmax-xmin)
     κΔτp_2 .= cfl .* η_2[:,1:end-1] .* Δx ./ (xmax-xmin)
@@ -168,6 +168,10 @@ end
     # PT loop
     it=1; iter=1; err=2*ε; err_evo1=[]; err_evo2=[];
     while (err>ε && iter<=iterMax)
+        # dvydy = 1/2*dv(dvxdx) + 3/4 * P/eta
+        Vy_2[2:end-1,end] = Vy_2[2:end-1,end-1] - Δy*1/2*(Vx_1[2:end-0,end] - Vx_1[1:end-1,end])/Δx
+        # dvxdy = -(dvydx)
+        Vx_2[2:end-1,end] = Vx_2[2:end-1,end-1] - Δy*1/1*(Vy_1[2:end-0,end] - Vy_1[1:end-1,end])/Δx
         ∇v_1  .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,Ac_1) .+ ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,Cc_1) 
         ∇v_2[:,1:end-1]  .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,Ac_2) .+ ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,Cc_2) 
         ε̇xx_1 .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,Ac_1) .- 1.0/3.0*∇v_1
@@ -186,29 +190,29 @@ end
         Rx_2                  .= ∂_∂x(τxx_2[:,1:end-1],τxx_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) .+ ∂_∂y(τxy_1,τxy_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .-  ∂_∂x(P_2[:,1:end-1],P_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) 
         Ry_1[2:end-1,2:end-0] .= ∂_∂y(τyy_2[2:end-1,:],τyy_1[:,2:end-0],Δx,Δy,Cv_1[2:end-1,2:end-0]) .+ ∂_∂x(τxy_1[:,2:end-0],τxy_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-0]) .-  ∂_∂y(P_2[2:end-1,:],P_1[:,2:end-0],Δx,Δy,Cv_1[2:end-1,2:end-0]) .+ ρ_1[2:end-1,2:end-0].*g
         Ry_2                  .= ∂_∂y(τyy_1,τyy_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .+ ∂_∂x(τxy_2[:,1:end-1],τxy_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) .-  ∂_∂y(P_1,P_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .+ ρ_2.*g
-        # Rp_1                  .= .-∇v_1
-        # Rp_2                  .= .-∇v_2 
-        # # Calculate rate update --------------------------------------
-        # dVxdτ_1 .= (1-ρ) .* dVxdτ_1 .+ Rx_1
-        # dVydτ_1 .= (1-ρ) .* dVydτ_1 .+ Ry_1
-        # dVxdτ_2 .= (1-ρ) .* dVxdτ_2 .+ Rx_2
-        # dVydτ_2 .= (1-ρ) .* dVydτ_2 .+ Ry_2
-        # # Update velocity and pressure -------------------------------
-        # Vx_1[2:end-1,2:end-1] .+= Δτv_1 ./ ρ .* dVxdτ_1[2:end-1,2:end-1]
-        # Vy_1[2:end-1,2:end-1] .+= Δτv_1 ./ ρ .* dVydτ_1[2:end-1,2:end-1]
-        # Vx_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVxdτ_2
-        # Vy_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVydτ_2
-        # P_1                   .+= κΔτp_1 .* Rp_1
-        # P_2                   .+= κΔτp_2 .* Rp_2
-        # # Convergence check
-        # if mod(iter, nout)==0 || iter==1
-        #     norm_Rx = 0.5*( norm(Rx_1)/sqrt(length(Rx_1)) + norm(Rx_2)/sqrt(length(Rx_2)) )
-        #     norm_Ry = 0.5*( norm(Ry_1)/sqrt(length(Ry_1)) + norm(Ry_2)/sqrt(length(Ry_2)) )
-        #     norm_Rp = 0.5*( norm(Rp_1)/sqrt(length(Rp_1)) + norm(Rp_2)/sqrt(length(Rp_2)) )
-        #     @printf("it = %03d, iter = %04d, nRx=%1.3e nRy=%1.3e nRp=%1.3e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
-        #     if (isnan(norm_Rx) || isnan(norm_Ry) || isnan(norm_Rp)) error("NaN"); end
-        #     if (norm_Rx<tol && norm_Ry<tol && norm_Rp<tol) break; end
-        # end
+        Rp_1                  .= .-∇v_1
+        Rp_2                  .= .-∇v_2[:,1:end-1]
+        # Calculate rate update --------------------------------------
+        dVxdτ_1 .= (1-ρ) .* dVxdτ_1 .+ Rx_1
+        dVydτ_1 .= (1-ρ) .* dVydτ_1 .+ Ry_1
+        dVxdτ_2 .= (1-ρ) .* dVxdτ_2 .+ Rx_2
+        dVydτ_2 .= (1-ρ) .* dVydτ_2 .+ Ry_2
+        # Update velocity and pressure -------------------------------
+        Vx_1[2:end-1,2:end-0] .+= Δτv_1 ./ ρ .* dVxdτ_1[2:end-1,2:end-0]
+        Vy_1[2:end-1,2:end-0] .+= Δτv_1 ./ ρ .* dVydτ_1[2:end-1,2:end-0]
+        Vx_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVxdτ_2
+        Vy_2[2:end-1,2:end-1] .+= Δτv_2 ./ ρ .* dVydτ_2
+        P_1                   .+= κΔτp_1 .* Rp_1
+        P_2[:,1:end-1]        .+= κΔτp_2 .* Rp_2
+        # Convergence check
+        if mod(iter, nout)==0 || iter==1
+            norm_Rx = 0.5*( norm(Rx_1)/sqrt(length(Rx_1)) + norm(Rx_2)/sqrt(length(Rx_2)) )
+            norm_Ry = 0.5*( norm(Ry_1)/sqrt(length(Ry_1)) + norm(Ry_2)/sqrt(length(Ry_2)) )
+            norm_Rp = 0.5*( norm(Rp_1)/sqrt(length(Rp_1)) + norm(Rp_2)/sqrt(length(Rp_2)) )
+            @printf("it = %03d, iter = %04d, nRx=%1.3e nRy=%1.3e nRp=%1.3e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
+            if (isnan(norm_Rx) || isnan(norm_Ry) || isnan(norm_Rp)) error("NaN"); end
+            if (norm_Rx<tol && norm_Ry<tol && norm_Rp<tol) break; end
+        end
         iter+=1; global itg=iter
     end
     end
