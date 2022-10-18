@@ -1,4 +1,4 @@
-# VISCOUS SINKER WITH TOPOGRAPHY AND FULL DIRICHLET
+# VISCOUS SINKER WITH TOPOGRAPHY AND FREE SURFACE
 # Initialisation
 using Plots, Printf, LinearAlgebra
 import CairoMakie
@@ -34,13 +34,11 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
     CairoMakie.poly!(p, color = sol.vy, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
-
-
-      # CairoMakie.scatter!(x1,y1, color=:white)
+    
+    # CairoMakie.scatter!(x1,y1, color=:white)
     # CairoMakie.scatter!(x2,y2, color=:white, marker=:xcross)
     CairoMakie.Colorbar(f, colormap = cmap, limits=limits, flipaxis = true, size = 25 )
 
-    
     display(f)
     return nothing
 end
