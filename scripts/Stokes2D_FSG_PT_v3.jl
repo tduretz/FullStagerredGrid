@@ -2,7 +2,7 @@
 # Initialisation
 using Plots, Printf, LinearAlgebra
 import CairoMakie
-using Makie.GeometryBasics
+using Makie.GeometryBasics, FileIO
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,A) = (f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ A.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,C) = C.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy# .+ C.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx
@@ -12,34 +12,40 @@ using Makie.GeometryBasics
 @views   avh(A)       = ( 0.25./A[1:end-1,1:end-1] .+ 0.25./A[1:end-1,2:end-0] .+ 0.25./A[2:end-0,1:end-1] .+ 0.25./A[2:end-0,2:end-0]).^(-1)
 @views   avWESN(A,B)  = 0.25.*(A[:,1:end-1] .+ A[:,2:end-0] .+ B[1:end-1,:] .+ B[2:end-0,:])
 Dat = Float64  # Precision (double=Float64 or single=Float32)
-function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y2; cmap = :turbo )
+function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y2; cmap = :turbo, write_fig=false )
     f   = CairoMakie.Figure(resolution = (1200, 1000))
 
     ar = (xmax - xmin) / (ymax - ymin)
 
     CairoMakie.Axis(f[1,1], aspect = ar)
-    min_v = minimum( sol.p ); max_v = maximum( sol.p )
+    min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
+
+    min_v = .0; max_v = 5.
+
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
     CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
-    CairoMakie.Axis(f[2,1], aspect = ar)
-    min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
-    limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    # CairoMakie.Axis(f[2,1], aspect = ar)
+    # min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    # CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
-    CairoMakie.Axis(f[2,2], aspect = ar)
-    min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
-    limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    CairoMakie.poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    # CairoMakie.Axis(f[2,2], aspect = ar)
+    # min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    # CairoMakie.poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
     
     # CairoMakie.scatter!(x1,y1, color=:white)
     # CairoMakie.scatter!(x2,y2, color=:white, marker=:xcross)
-    # CairoMakie.Colorbar(f, colormap = cmap, limits=limits, flipaxis = true, size = 25 )
+    CairoMakie.Colorbar(f[1, 2], colormap = cmap, limits=limits, flipaxis = true, size = 25 )
 
     display(f)
+    if write_fig==true 
+        FileIO.save( string(@__DIR__, "/plot.png"), f)
+    end
     return nothing
 end
 @views h(x,A,σ,b)    = A*exp(-x^2/σ^2) + b
@@ -56,9 +62,9 @@ end
     adapt_mesh = true
     solve      = true
     # Numerics
-    ncx, ncy = 51, 51    # numerical grid resolution
+    ncx, ncy = 71, 71    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
-    iterMax  = 1e4       # max number of iters
+    iterMax  = 2e4       # max number of iters
     nout     = 1000      # check frequency
     # Iterative parameters -------------------------------------------
     if adapt_mesh
@@ -141,12 +147,12 @@ end
     Vy_1 .=  εbg.*yv2_1; Vy_2 .=  εbg.*yv2_2
     # Viscosity
     η_1  .= 1.0; η_2  .= 1.0
-    η_1[xc2_1.^2 .+ (yc2_1.-y0).^2 .< rad] .= 100.
-    η_2[xc2_2.^2 .+ (yc2_2.-y0).^2 .< rad] .= 100.
+    # η_1[xc2_1.^2 .+ (yc2_1.-y0).^2 .< rad] .= 100.
+    # η_2[xc2_2.^2 .+ (yc2_2.-y0).^2 .< rad] .= 100.
     # Density
     ρ_1  .= 1.0; ρ_2  .= 1.0
-    ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
-    ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0)^2 .< rad] .= 2.
+    # ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
+    # ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0)^2 .< rad] .= 2.
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))
     η_2_sm    = zeros(size(η_2,1), size(η_2,2)-1)
@@ -203,9 +209,6 @@ end
             τyy_2 .= 2.0 .* η_2 .* ε̇yy_2
             τxy_1 .= 2.0 .* η_1 .* ε̇xy_1
             τxy_2 .= 2.0 .* η_2 .* ε̇xy_2
-            if iter==1000 @show η_2[:,end] end
-            if iter==1000 @show ε̇xx_2[:,end] end
-            if iter==1000 @show τxx_2[:,end] end
             # if iter==1000 @show τxx_1[:,end] end
             Rx_1[2:end-1,2:end-0] .= ∂_∂x(τxx_1[:,2:end-0],τxx_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-0]) .+ ∂_∂y(τxy_2[2:end-1,:],τxy_1[:,2:end-0],Δx,Δy,Cv_1[2:end-1,2:end-0]) .-  ∂_∂x(P_1[:,2:end-0],P_2[2:end-1,:],Δx,Δy,Av_1[2:end-1,2:end-0])
             Rx_2                  .= ∂_∂x(τxx_2[:,1:end-1],τxx_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) .+ ∂_∂y(τxy_1,τxy_2[:,1:end-1],           Δx,Δy,Cv_2[2:end-1,2:end-1]) .-  ∂_∂x(P_2[:,1:end-1],P_1,           Δx,Δy,Av_2[2:end-1,2:end-1]) 
@@ -249,7 +252,7 @@ end
     sol   = ( vx=Vx_2[2:end-1,2:end-1][:], vy=Vy_2[2:end-1,2:end-1][:], p=avWESN(P_1, P_2[:,1:end-1])[:])
     xc2   = avWESN(xc2_1, xc2_2[:,1:end-1])[:] 
     yc2   = avWESN(yc2_1, yc2_2[:,1:end-1])[:]
-    PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:])
+    PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:], write_fig=true)
     return
 end
 
