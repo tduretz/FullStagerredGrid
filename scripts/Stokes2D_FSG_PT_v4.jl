@@ -1,6 +1,6 @@
-# TRY 2D DEFORMATION
+# TRY EXPONENTIAL MESH
 # Initialisation
-using Plots, Printf, LinearAlgebra
+using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
 using Makie.GeometryBasics, FileIO
 # Macros
@@ -17,14 +17,14 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
 
     ar = (xmax - xmin) / (ymax - ymin)
 
-    CairoMakie.Axis(f[1,1], aspect = ar)
+    CairoMakie.Axis(f[1,1]) #, aspect = ar
     min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
 
     min_v = .0; max_v = 5.
 
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
-    CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # CairoMakie.Axis(f[2,1], aspect = ar)
     # min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
@@ -48,8 +48,8 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     end
     return nothing
 end
-@views h(x,A,σ,b)    = A*exp(-x^2/σ^2) + b
-@views dhdx(x,A,σ,b) = -2*x/σ^2*A*exp(-x.^2/σ^2)
+@views h(x,A,σ,b,x0)    = A*exp(-(x-x0)^2/σ^2) + b
+@views dhdx(x,A,σ,b,x0) = -2*x/σ^2*A*exp(-(x-x0).^2/σ^2)
 # 2D Poisson routine
 @views function Stokes2S_FSG()
     # Physics
@@ -62,7 +62,7 @@ end
     adapt_mesh = true
     solve      = false
     # Numerics
-    ncx, ncy = 71, 71    # numerical grid resolution
+    ncx, ncy = 51, 51    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
     iterMax  = 2e4       # max number of iters
     nout     = 1000      # check frequency
@@ -126,12 +126,41 @@ end
     C  =  ones(2ncx+3, 2ncy+3)
     hx = zeros(2ncx+3, 2ncy+3)
     if adapt_mesh
-        m      = ymin
-        z0     =    -h.(xv4, 1., 0.5, ymax) # negative to conform with De La Puente paper
-        hx     = -dhdx.(xv4, 1., 0.5, ymax) # negative to conform with De La Puente paper
-        A     .= (ymin .- yv4)./(z0.+m) .* hx
-        C     .= ymin./(z0.+m)
-        yv4    = (yv4/ymin).*((z0.+m)).-z0     
+        # m      = ymin
+        # z0     =    -h.(xv4, 1., 0.5, ymax) # negative to conform with De La Puente paper
+        # hx     = -dhdx.(xv4, 1., 0.5, ymax) # negative to conform with De La Puente paper
+        # A     .= (ymin .- yv4)./(z0.+m) .* hx
+        # C     .= ymin./(z0.+m)
+        # yv4    = (yv4/ymin).*((z0.+m)).-z0 
+
+        # First shift x
+        x0       = (xmax + xmin)/2
+        σx       = 0.5
+
+        xmin0    = minimum(xv4)
+        xmax0    = maximum(xv4)
+        xmin1    = (sinh.( σx.*(xmin0.-x0) ))
+        xmax1    = (sinh.( σx.*(xmax0.-x0) ))
+        sx       = (xmax0-xmin0)/(xmax1-xmin1)
+        xv4      = (sinh.( σx.*(xv4.-x0) )) .* sx  .+ x0
+        @printf("Check width = %2.2e\n", (maximum(xv4)-minimum(xv4)) - (xmax0-xmin0))
+        
+        y0       = ymax
+        σy       = 0.5
+        
+        ymin0    = minimum(yv4)
+        ymax0    = maximum(yv4)
+        ymin1    = (sinh.( σy.*(ymin0.-y0) ))
+        ymax1    = (sinh.( σy.*(ymax0.-y0) ))
+        sy       = (ymax0-ymin0)/(ymax1-ymin1)
+        yv4      = (sinh.( σy.*(yv4.-y0) )) .* sy  .+ y0
+        @printf("Check height = %2.2e\n", (maximum(yv4)-minimum(yv4)) - (ymax0-ymin0))
+        
+        # then evaluate topo = f(x)
+        z0       = -h.(xv4, 1., 0.5, maximum(yv4), x0) # negative to conform with De La Puente paper
+        m        = minimum(yv4)
+        yv4      = (yv4./m).*((z0.+m)).-z0 
+
     end
     # Grid subsets
     xv2_1, yv2_1 = xv4[2:2:end-1,2:2:end-1], yv4[2:2:end-1,2:2:end-1]
@@ -257,3 +286,4 @@ end
 end
 
 Stokes2S_FSG()
+
