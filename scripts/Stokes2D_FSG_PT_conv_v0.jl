@@ -31,10 +31,10 @@ end
     εbg      = -1
     rad      = 0.5
     # Numerics
-    n = 8
+    n        = 8
     ncx, ncy = n*30+1, n*30+1    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerence
-    iterMax  = 1e4     # max number of iters
+    iterMax  = 5e4     # max number of iters
     nout     = 1000       # check frequency
     # Iterative parameters -------------------------------------------
     Reopt    = 0.625*π*2
@@ -98,25 +98,19 @@ end
     Vx_1 .= εbg.*xv2_1; Vx_2 .= εbg.*xv2_2
     Vy_1 .= -εbg.*yv2_1; Vy_2 .= -εbg.*yv2_2
 
-    # @show size(Vx_1)
-    # @show size(xv2_1)
-    # for i=1:size(xv2_1,1)
-    #     for j=1:size(xv2_1,2)
-    #         vx, vy, P, sxx, syy, sxy, v1x, v1y, v2x, v2y, eta = EvalAnalDani( xv2_1[i,j], yv2_1[i,j], rad, 1.0, 100.0 )
-    #     Vx_1[i,j] = vx
-    #     Vy_1[i,j] = vy
-    #     end
-    # end
-    # Vx_1[2:end-1,2:end-1] .= 0.0
-    # Vy_1[2:end-1,2:end-1] .= 0.0
+    for i in eachindex(Vx_1)
+        Vx, Vy = SolutionFields_v(1.0, 1.00, rad, εbg, 0.0, xv2_1[i], yv2_1[i], 0)
+        Vx_1[i] = Vx
+        Vy_1[i] = Vy
+    end
 
     P_1_ana =   zeros(Dat, ncx-0, ncy+1)
-    for i=1:length(xc2_1)
+    for i in eachindex(P_1_ana)
         Vx, Vy, P = EvalAnalDani( xc2_1[i], yc2_1[i], rad, 1.0, 100.0 )
         P_1_ana[i] = P
     end
     P_2_ana =   zeros(Dat, ncx+1, ncy-0)
-    for i=1:length(xc2_2)
+    for i in eachindex(P_2_ana)
         Vx, Vy, P = EvalAnalDani( xc2_2[i], yc2_2[i], rad, 1.0, 100.0 )
         P_2_ana[i] = P
     end
