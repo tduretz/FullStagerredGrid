@@ -278,19 +278,13 @@ end
             ∂η∂y[i] = invJ[2,2]
         end
 
-        @printf("min(dksidx) = %1.6f --- max(dksidx) = %1.6f\n", minimum(dksidx), maximum(dksidx))
+        @printf("min(∂ξ∂x) = %1.6f --- max(∂ξ∂x) = %1.6f\n", minimum(∂ξ∂x), maximum(∂ξ∂x))
 
-        @printf("min(dksidy) = %1.6f --- max(dksidy) = %1.6f\n", minimum(dksidy), maximum(dksidy))
+        @printf("min(∂ξ∂y) = %1.6f --- max(∂ξ∂y) = %1.6f\n", minimum(∂ξ∂y), maximum(∂ξ∂y))
 
+        @printf("min(∂η∂x) = %1.6f --- max(∂η∂x) = %1.6f\n", minimum(∂η∂x), maximum(∂η∂x))
 
-        @printf("detadx\n")
-        @printf("min(detadx) = %1.6f --- max(detadx) = %1.6f\n", minimum(detadx), maximum(detadx))
-        @printf("min(A) = %1.6f --- max(A) = %1.6f\n", minimum(A), maximum(A))
-
-        @printf("detady\n")
-        @printf("min(detady) = %1.6f --- max(detady) = %1.6f\n", minimum(detady), maximum(detady))
-        @printf("min(C) = %1.6f --- max(C) = %1.6f\n", minimum(C), maximum(C))
-
+        @printf("min(∂η∂y) = %1.6f --- max(∂η∂y) = %1.6f\n", minimum(∂η∂y), maximum(∂η∂y))
 
 
         # # First shift x
@@ -390,6 +384,13 @@ end
             # !!!!!!!!! Change derivatives !!!!!
             dVxdx  = (Vx_1[2:end-0,end] - Vx_1[1:end-1,end])/Δx
             dVydx  = (Vy_1[2:end-0,end] - Vy_1[1:end-1,end])/Δx
+            @show size(dVxdx)
+            @show size(dVydx)
+            dVxdx  = ∂_∂x(Vx_1[:,end],Vx_2[2:end-1,end],Δx,Δy,∂ξ∂xc_1[:,end],∂η∂xc_1[:,end])
+            dVydx  = ∂_∂y(Vy_2[2:end-1,end],Vy_1[:,end],Δx,Δy,∂ξ∂yc_1[:,end],∂η∂yc_1[:,end])
+            @show size(dVxdx)
+            @show size(dVydx)
+            error()
             P_surf = P_1[:,end]
 
             # See python notebook v4
@@ -401,11 +402,11 @@ end
             ∇v_1            .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) .+ ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,∂ξ∂yc_1,∂η∂yc_1) 
             ∇v_2[:,1:end-1] .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) .+ ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) 
             ε̇xx_1 .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) .- 1.0/3.0*∇v_1
-            ε̇yy_1 .=  ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,∂ξ∂xc_1,∂η∂yc_1) .- 1.0/3.0*∇v_1
-            ε̇xy_1 .= (∂_∂y(Vx_2[2:end-1,:],Vx_1,Δx,Δy,∂ξ∂xc_1,∂η∂yc_1) .+ ∂_∂x(Vy_1,Vy_2[2:end-1,:], Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) ) / 2.
+            ε̇yy_1 .=  ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,∂ξ∂yc_1,∂η∂yc_1) .- 1.0/3.0*∇v_1
+            ε̇xy_1 .= (∂_∂y(Vx_2[2:end-1,:],Vx_1,Δx,Δy,∂ξ∂yc_1,∂η∂yc_1) .+ ∂_∂x(Vy_1,Vy_2[2:end-1,:], Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) ) / 2.
             ε̇xx_2[:,1:end-1] .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) .- 1.0/3.0*∇v_2[:,1:end-1]
-            ε̇yy_2[:,1:end-1] .=  ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,∂ξ∂xc_2,∂η∂yc_2) .- 1.0/3.0*∇v_2[:,1:end-1]
-            ε̇xy_2[:,1:end-1] .= (∂_∂y(Vx_1,Vx_2[:,2:end-1],Δx,Δy,∂ξ∂xc_2,∂η∂yc_2) .+ ∂_∂x(Vy_2[:,2:end-1],Vy_1, Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) ) / 2.
+            ε̇yy_2[:,1:end-1] .=  ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) .- 1.0/3.0*∇v_2[:,1:end-1]
+            ε̇xy_2[:,1:end-1] .= (∂_∂y(Vx_1,Vx_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) .+ ∂_∂x(Vy_2[:,2:end-1],Vy_1, Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) ) / 2.
             τxx_1 .= 2.0 .* η_1 .* ε̇xx_1
             τxx_2 .= 2.0 .* η_2 .* ε̇xx_2
             τyy_1 .= 2.0 .* η_1 .* ε̇yy_1
