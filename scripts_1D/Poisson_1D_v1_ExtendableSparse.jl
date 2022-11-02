@@ -30,8 +30,8 @@ function UpdateExtSparseK!(K, Num, dy, η, nnod, bct)
     for inode in 1:nnod  # Loop on equations
         iC = Num[inode] 
         if bct[inode] == 1
-            setindex!(K,1.0,iC,iC)
             # updateindex!(K,+,1.0,iC,iC) # accumulate, e.g. FEM
+            setindex!(K,1.0,iC,iC)
         else
             iS = Num[inode-1] 
             iN = Num[inode+1] 
@@ -41,8 +41,8 @@ function UpdateExtSparseK!(K, Num, dy, η, nnod, bct)
             cS = -1.0 * eS ./ dy .^ 2
             cN = -1.0 * eN ./ dy .^ 2
             if bct[inode-1] == 0 # Symmetrise by removing unnecessary Dirichlet connection
-                setindex!(K,cS,iC,iS)
                 # updateindex!(K,+,cS,iC,iS)
+                setindex!(K,cS,iC,iS)
             end
             # updateindex!(K,+,cC,iC,iC)
             setindex!(K,cC,iC,iC)
@@ -115,30 +115,45 @@ end
 
 function Main_1D_Poisson()
     L        = 1.0              # domain size
-    ncy      = 1000000           # number of cells, ncy+1=number of nodes
+    ncy      = 5
+    # ncy      = 10000000           # number of cells, ncy+1=number of nodes
+    # ncy      = 10000           # number of cells, ncy+1=number of nodes
+
     Δy       = L/ncy            # spacing
     Num      = 1:1:(ncy+1)      # dof numbering
     η        = ones(ncy)        # coefficient
     bct      = zeros(Int,ncy+1) # array that identifies dof type (here Dirichlet:1, else: 0)
     bct[1]   = 1                # identify BC nodes as Dirichlets
     bct[end] = 1                # identify BC nodes as Dirichlets 
+    # Initialise matrix
     println("Create initial sparse matrix") 
     @time Kuu, K_nz = CreateSparseK(ncy+1, Num, bct)
     println("Create initial extendable sparse matrix")
     @time Kes = CreateExtSparseK(ncy+1, Num, bct)
+    # Set coefficient to the matrix
     println("Update non-zeros. Achtung, it is CSC: so not trivial!")
     @time UpdateSparseK!(K_nz, Δy, η, ncy+1, bct)
     println("Update non-zeros of extendable sparse")
     @time UpdateExtSparseK!(Kes, Num, Δy, η, ncy+1, bct)
-    # display(Kuu)
-    # display(Kes)
-
-    # println("Initial Cholesky factorisation")
-    # @time Kc  = cholesky(Kuu; check = false)
-    # println("Update Cholesky factors reusing old ones: why does this allocate?")
-    # @time cholesky!(Kc,Kuu; check = false)
+    # Initial solve
+    println("Initial Cholesky factorisation")
+    @time Kuu_fact = cholesky(Kuu)
+    println("Initial Cholesky factorisation for extendable sparse")
+    @time Kes_fact = CholeskyFactorization(Kes)
+    # Let's update the matrix
+    η       .= 10.0        # coefficient
+    println("Update non-zeros. Achtung, it is CSC: so not trivial!")
+    @time UpdateSparseK!(K_nz, Δy, η, ncy+1, bct)
+    println("Update non-zeros of extendable sparse")
+    @time UpdateExtSparseK!(Kes, Num, Δy, η, ncy+1, bct)
+    # Update cholesky factors accordingly...
+    println("Update Cholesky factors reusing old ones: why does this allocate?")
+    @time cholesky!(Kuu_fact, Kuu)
+    println("Update Cholesky factors reusing old ones: why does this allocate?")
+    @time ExtendableSparse.update!(Kes_fact)
 end 
 
-for i=1:3
-Main_1D_Poisson()
+for i=1:5
+    println("run $i")
+    Main_1D_Poisson()
 end
