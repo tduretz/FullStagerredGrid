@@ -113,12 +113,36 @@ function UpdateSparseK!(K_nz, dy, η, nnod, bct)
     return nothing    
 end
 
+function SimpleUpdateSparseK!(K, Num, dy, η, nnod, bct)
+    # Update non-zeros, K_nz, in CSC format
+    for inode in 1:nnod  # Loop on equations
+        iC = Num[inode] 
+        if bct[inode] == 1
+            K[iC,iC] = 1.0
+        else
+            iS = Num[inode-1] 
+            iN = Num[inode+1] 
+            eS = η[inode-1]
+            eN = η[inode]
+            cC = (1.0 * eN ./ dy + 1.0 * eS ./ dy) ./ dy
+            cS = -1.0 * eS ./ dy .^ 2
+            cN = -1.0 * eN ./ dy .^ 2
+            if bct[inode-1] == 0 # Symmetrise by removing unnecessary Dirichlet connection
+                K[iC,iS] = cS
+            end
+            K[iC,iC] = cC
+            if bct[inode+1] == 0 # Symmetrise by removing unnecessary Dirichlet connection
+                K[iC,iN] = cN
+            end
+        end
+    end
+    return nothing    
+end
+
 function Main_1D_Poisson()
     L        = 1.0              # domain size
-    ncy      = 5
     # ncy      = 10000000           # number of cells, ncy+1=number of nodes
-    # ncy      = 10000           # number of cells, ncy+1=number of nodes
-
+    ncy      = 1000000           # number of cells, ncy+1=number of nodes
     Δy       = L/ncy            # spacing
     Num      = 1:1:(ncy+1)      # dof numbering
     η        = ones(ncy)        # coefficient
@@ -133,6 +157,8 @@ function Main_1D_Poisson()
     # Set coefficient to the matrix
     println("Update non-zeros. Achtung, it is CSC: so not trivial!")
     @time UpdateSparseK!(K_nz, Δy, η, ncy+1, bct)
+    println("Simple CSC update")
+    @time SimpleUpdateSparseK!(Kuu, Num, Δy, η, ncy+1, bct)
     println("Update non-zeros of extendable sparse")
     @time UpdateExtSparseK!(Kes, Num, Δy, η, ncy+1, bct)
     # Initial solve
@@ -144,6 +170,8 @@ function Main_1D_Poisson()
     η       .= 10.0        # coefficient
     println("Update non-zeros. Achtung, it is CSC: so not trivial!")
     @time UpdateSparseK!(K_nz, Δy, η, ncy+1, bct)
+    println("Simple CSC update")
+    @time SimpleUpdateSparseK!(Kuu, Num, Δy, η, ncy+1, bct)
     println("Update non-zeros of extendable sparse")
     @time UpdateExtSparseK!(Kes, Num, Δy, η, ncy+1, bct)
     # Update cholesky factors accordingly...
