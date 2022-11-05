@@ -4,6 +4,9 @@ using ExtendableSparse
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
 @views    ∂_∂(fE,fW,fN,fS,Δ,a,b) = a*(fE - fW) / Δ.x .+ b*(fN - fS) / Δ.y
+@views   function AddToExtSparse!(K,i,j,Tag, v) 
+    if ((j!=-1) || (j==i || Tag==1)) K[i,j]  = v end
+end
 function Main_2D_DI()
     # Physics
     # x          = (min=-3.0, max=3.0)  
@@ -53,7 +56,9 @@ function Main_2D_DI()
                  p   = (ex = zeros(nc.x+2, nv.y), ey = zeros(nv.x,   nc.y+2)) ) 
     ρ        = ( (v  = zeros(nv.x,   nv.y), c  = zeros(nc.x+2, nc.y+2)) )
     η        = (        ex = zeros(nc.x+2, nv.y), ey = zeros(nv.x,   nc.y+2)  )
-    BC       = (x = zeros(Int, nv.x,   nv.y), y = zeros(Int, nv.x,   nv.y) )
+    BC       = (x = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
+                y = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
+                p = (ex = -1*ones(Int, nc.x+2, nv.y),     ey = -1*ones(Int, nv.x,   nc.y+2))  )
     Num      = ( x   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
                  y   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)),
                  p   = (ex = -1*ones(Int, nc.x+2, nv.y), ey = -1*ones(Int, nv.x,   nc.y+2)) )
@@ -87,31 +92,37 @@ function Main_2D_DI()
     # Boundary conditions
     BCVx = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
     BCVy = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
+    BC.x.v[2:end-1,2:end-1] .= 0 # inner points
+    BC.y.v[2:end-1,2:end-1] .= 0 # inner points
+    BC.x.c[2:end-1,2:end-1] .= 0 # inner points
+    BC.y.c[2:end-1,2:end-1] .= 0 # inner points
+    BC.p.ex[2:end-1,2:end-1] .= 0 # inner points
+    BC.p.ey[2:end-1,2:end-1] .= 0 # inner points
     # Vx
     if BCVx.West == :Dirichlet 
-        BC.x[1,:]   .= 1
+        BC.x.v[2,2:end-1] .= 1
     end
     if BCVx.East == :Dirichlet 
-        BC.x[end,:] .= 1
+        BC.x.v[end-1,2:end-1] .= 1
     end
     if BCVx.South == :Dirichlet 
-        BC.x[:,1]   .= 1
+        BC.x.v[2:end-1,2]   .= 1
     end
     if BCVx.North == :Dirichlet 
-        BC.x[:,end] .= 1
+        BC.x.v[2:end-1,end-1] .= 1
     end
     # Vy
     if BCVy.West == :Dirichlet 
-        BC.y[1,:]   .= 1
+        BC.y.v[2,2:end-1]   .= 1
     end
     if BCVy.East == :Dirichlet 
-        BC.y[end,:] .= 1
+        BC.y.v[end-1,2:end-1] .= 1
     end
     if BCVy.South == :Dirichlet 
-        BC.y[:,1]   .= 1
+        BC.y.v[2:end-1,2]   .= 1
     end
     if BCVy.North == :Dirichlet 
-        BC.y[:,end] .= 1
+        BC.y.v[2:end-1,end-1] .= 1
     end
     # Loop on vertices
     @time for j in axes(R.x.v, 2), i in axes(R.x.v, 1)
@@ -122,13 +133,13 @@ function Main_2D_DI()
         τxxN = τ.xx.ey[i,j+1]; τyyN = τ.yy.ey[i,j+1]; τxyN = τ.xy.ey[i,j+1]; PN   = P.ey[i,j+1]   
         ∂ξ∂x = ∂ξ.∂x.v[i,j];   ∂ξ∂y = ∂ξ.∂y.v[i,j];   ∂η∂x = ∂η.∂x.v[i,j];   ∂η∂y = ∂η.∂y.v[i,j]
         # x
-        if BC.x[i,j] == 1
+        if BC.x.v[i,j] == 1
             R.x.v[i,j] = 0.
         else
             R.x.v[i,j] = - (∂_∂(τxxE,τxxW,τxxN,τxxS,Δ,∂ξ∂x,∂η∂x) + ∂_∂(τxyE,τxyW,τxyN,τxyS,Δ,∂ξ∂y,∂η∂y) - ∂_∂(PE,PW,PN,PS,Δ,∂ξ∂x,∂η∂x) + ρ.v[i,j]*g.x )
         end
         # y
-        if BC.x[i,j] == 1
+        if BC.x.v[i,j] == 1
             R.x.v[i,j] = 0.
         else
             R.y.v[i,j] = - (∂_∂(τyyE,τyyW,τyyN,τyyS,Δ,∂ξ∂y,∂η∂y) + ∂_∂(τxyE,τxyW,τxyN,τxyS,Δ,∂ξ∂x,∂η∂x) - ∂_∂(PE,PW,PN,PS,Δ,∂ξ∂y,∂η∂y) + ρ.v[i,j]*g.z) 
@@ -163,116 +174,126 @@ function Main_2D_DI()
         end
     end
     # Numbering
-    Num.x.v[        :,     :] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
-    Num.x.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.x.v)
-    Num.y.v[        :,     :] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.c)
-    Num.y.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.y.v)
-    Num.p.ex[2:end-1,      :] .= reshape(1:((nc.x)*(nv.y)), nc.x, nv.y) 
-    Num.p.ey[      :,2:end-1] .= reshape(1:((nv.x)*(nc.y)), nv.x, nc.y) .+ maximum(Num.p.ex)
+
+    Num      = ( x   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
+                    y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
+                    p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
+
+
+    Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
+    Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
+    Num.x.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.y.v)
+    Num.y.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.x.c)
+    Num.p.ex[2:end-1,2:end-1] .= reshape(1:((nc.x)*(nv.y)), nc.x, nv.y) 
+    Num.p.ey[2:end-1,2:end-1] .= reshape(1:((nv.x)*(nc.y)), nv.x, nc.y) .+ maximum(Num.p.ex)
     # Initial sparse
     println("Initial Assembly")
     ndofV = maximum(Num.y.c)
     ndofP = maximum(Num.p.ey)
     Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
     Kup   = ExtendableSparseMatrix(ndofV, ndofP)
-    inz   = 1
-    @time for j in axes(R.x.v, 2), i in axes(R.x.v, 1)
-        iVxC = Num.x.v[i,j] 
-        iVyC = Num.y.v[i,j] 
-        if i>1  
-            iVxW = Num.x.v[i-1,j] 
-            iVyW = Num.y.v[i-1,j] 
-            iPW  = Num.p.ex[i,j]
-        end
-        if i<size(R.x.v,1)  
-            iVxE = Num.x.v[i+1,j] 
-            iVyE = Num.y.v[i+1,j] 
-            iPE  = Num.p.ex[i+1,j]
-        end
-        if j>1  
-            iVxS = Num.x.v[i,j-1] 
-            iVyS = Num.y.v[i,j-1] 
-            iPS  = Num.p.ey[i,j]
-        end
-        if j<size(R.x.v,2)  
-            iVxN = Num.x.v[i,j+1] 
-            iVyN = Num.y.v[i,j+1] 
-            iPN  = Num.p.ey[i,j+1]
-        end
-        if i>1 && j>1
-            iVxSW = Num.x.c[i,j] 
-            iVySW = Num.y.c[i,j] 
-        end
-        if i<size(R.x.v,1)  && j>1
-            iVxSE = Num.x.c[i+1,j] 
-            iVySE = Num.y.c[i+1,j] 
-        end
-        if i>1 && j<size(R.x.v,2) 
-            iVxNW = Num.x.c[i,j+1] 
-            iVyNW = Num.y.c[i,j+1] 
-        end
-        if i<size(R.x.v,1)  && j<size(R.x.v,2) 
-            iVxNE = Num.x.c[i+1,j+1] 
-            iVyNE = Num.y.c[i+1,j+1] 
-        end
-        # Boundaries for x
-        if BC.x[i,j] == 1
-            Kuu[iVxC,iVxC]  = 1.0
+    iV    = zeros(Int, 18); tV    = zeros(Int, 18); vV   = ones(18)
+    iP    = zeros(Int,  4); tP    = zeros(Int,  4); vP   = ones( 4)
+    # Loop on vertices
+    @time for j in 2:nv.x+1, i in 2:nv.y+1
+        iV[1]  = Num.x.v[i,j];     tV[1]  = BC.x.v[i,j]      # C
+        iV[2]  = Num.x.v[i-1,j];   tV[2]  = BC.x.v[i-1,j]    # W
+        iV[3]  = Num.x.v[i+1,j];   tV[3]  = BC.x.v[i+1,j]    # E
+        iV[4]  = Num.x.v[i,j-1];   tV[4]  = BC.x.v[i,j-1]    # S
+        iV[5]  = Num.x.v[i,j+1];   tV[5]  = BC.x.v[i,j+1]    # N
+        iV[6]  = Num.x.c[i-1,j-1]; tV[6]  = BC.x.c[i-1,j-1]  # SW
+        iV[7]  = Num.x.c[i,j-1];   tV[7]  = BC.x.c[i,j-1]    # SE
+        iV[8]  = Num.x.c[i-1,j];   tV[8]  = BC.x.c[i-1,j]    # NW
+        iV[9]  = Num.x.c[i,j];     tV[9]  = BC.x.c[i,j]      # NE
+        #--------------
+        iV[10] = Num.y.v[i,j];     tV[10] = BC.y.v[i,j]      # C
+        iV[11] = Num.y.v[i-1,j];   tV[11] = BC.y.v[i-1,j]    # W
+        iV[12] = Num.y.v[i,j];     tV[12] = BC.y.v[i,j]      # E
+        iV[13] = Num.y.v[i,j-1];   tV[13] = BC.y.v[i,j-1]    # S
+        iV[14] = Num.y.v[i,j+1];   tV[14] = BC.y.v[i,j+1]    # N
+        iV[15] = Num.y.c[i-1,j-1]; tV[15] = BC.y.c[i-1,j-1]  # SW
+        iV[16] = Num.y.c[i,j-1];   tV[16] = BC.y.c[i,j-1]    # SE
+        iV[17] = Num.y.c[i-1,j];   tV[17] = BC.y.c[i-1,j]    # NW
+        iV[18] = Num.y.c[i,j];     tV[18] = BC.y.c[i,j]      # NE
+        #--------------
+        iP[1]  = Num.p.ex[i-1,j-1];  tP[1]  = BC.p.ex[i-1,j-1]   # W
+        iP[2]  = Num.p.ex[i,j-1];    tP[2]  = BC.p.ex[i,j-1]     # E
+        iP[3]  = Num.p.ey[i-1,j-1];  tP[3]  = BC.p.ey[i-1,j-1]   # S   
+        iP[4]  = Num.p.ey[i-1,j];    tP[4]  = BC.p.ey[i-1,j]     # N
+        # Vx
+        if BC.x.v[i,j] == 1
+            AddToExtSparse!(Kuu, iV[1], iV[1], tV[1], 1.0)
         else
-            Kuu[iVxC,iVxC]  = 1.0
-            Kuu[iVxC,iVxW]  = 1.0
-            Kuu[iVxC,iVxE]  = 1.0
-            Kuu[iVxC,iVxS]  = 1.0
-            Kuu[iVxC,iVxN]  = 1.0
-            Kuu[iVxC,iVxSW] = 1.0
-            Kuu[iVxC,iVxSE] = 1.0
-            Kuu[iVxC,iVxNW] = 1.0
-            Kuu[iVxC,iVxNE] = 1.0
-            Kuu[iVxC,iVyW]  = 1.0
-            Kuu[iVxC,iVyE]  = 1.0
-            Kuu[iVxC,iVyS]  = 1.0
-            Kuu[iVxC,iVyN]  = 1.0
-            Kuu[iVxC,iVySW] = 1.0
-            Kuu[iVxC,iVySE] = 1.0
-            Kuu[iVxC,iVyNW] = 1.0
-            Kuu[iVxC,iVyNE] = 1.0
+            for i in eachindex(vV)
+                AddToExtSparse!(Kuu, iV[1], iV[i],  tV[i],  vV[i])
+            end
             #--------------
-            # println(Kup)
-            println(i)
-            println(j)
-            println(iVxC)
-            println(iPW)
-            Kup[iVxC,iPW]  = 1.0
-            Kup[iVxC,iPE]  = 1.0
-            Kup[iVxC,iPS]  = 1.0
-            Kup[iVxC,iPN]  = 1.0
+            for i in eachindex(vP)
+                AddToExtSparse!(Kup, iV[1], iP[i],  tP[i],  vP[i])
+            end
         end
-        # Boundaries for y
-        if BC.y[i,j] == 1
-            Kuu[iVyC,iVyC] = inz; inz+=1
+        # Vx
+        if BC.y.v[i,j] == 1
+            AddToExtSparse!(Kuu, iV[10], iV[1], tV[1], 1.0)
         else
-            Kuu[iVyC,iVyC]  = 1.0
-            Kuu[iVyC,iVxW]  = 1.0
-            Kuu[iVyC,iVxE]  = 1.0
-            Kuu[iVyC,iVxS]  = 1.0
-            Kuu[iVyC,iVxN]  = 1.0
-            Kuu[iVyC,iVxSW] = 1.0
-            Kuu[iVyC,iVxSE] = 1.0
-            Kuu[iVyC,iVxNW] = 1.0
-            Kuu[iVyC,iVxNE] = 1.0
-            Kuu[iVyC,iVyW]  = 1.0
-            Kuu[iVyC,iVyE]  = 1.0
-            Kuu[iVyC,iVyS]  = 1.0
-            Kuu[iVyC,iVyN]  = 1.0
-            Kuu[iVyC,iVySW] = 1.0
-            Kuu[iVyC,iVySE] = 1.0
-            Kuu[iVyC,iVyNW] = 1.0
-            Kuu[iVyC,iVyNE] = 1.0
+            for i in eachindex(vV)
+                AddToExtSparse!(Kuu, iV[10], iV[i],  tV[i],  vV[i])
+            end
             #--------------
-            Kup[iVyC,iPW]  = 1.0
-            Kup[iVyC,iPE]  = 1.0
-            Kup[iVyC,iPS]  = 1.0
-            Kup[iVyC,iPN]  = 1.0
+            for i in eachindex(vP)
+                AddToExtSparse!(Kup, iV[10], iP[i],  tP[i],  vP[i])
+            end
+        end
+    end 
+    # Loop on centroids
+    @time for j in 2:nc.x+1, i in 2:nc.y+1
+        iV[1]  = Num.x.c[i,j];     tV[1]  = BC.x.c[i,j]      # C
+        iV[2]  = Num.x.c[i-1,j];   tV[2]  = BC.x.c[i-1,j]    # W
+        iV[3]  = Num.x.c[i+1,j];   tV[3]  = BC.x.c[i+1,j]    # E
+        iV[4]  = Num.x.c[i,j-1];   tV[4]  = BC.x.c[i,j-1]    # S
+        iV[5]  = Num.x.c[i,j+1];   tV[5]  = BC.x.c[i,j+1]    # N
+        iV[6]  = Num.x.v[i,j];     tV[6]  = BC.x.v[i,j]  # SW
+        iV[7]  = Num.x.v[i+1,j];   tV[7]  = BC.x.v[i+1,j]    # SE
+        iV[8]  = Num.x.v[i,j+1];   tV[8]  = BC.x.v[i,j+1]    # NW
+        iV[9]  = Num.x.v[i+1,j+1]; tV[9]  = BC.x.v[i+1,j+1]      # NE
+        #--------------
+        iV[10] = Num.y.c[i,j];     tV[10] = BC.y.c[i,j]      # C
+        iV[11] = Num.y.c[i-1,j];   tV[11] = BC.y.c[i-1,j]    # W
+        iV[12] = Num.y.c[i,j];     tV[12] = BC.y.c[i,j]      # E
+        iV[13] = Num.y.c[i,j-1];   tV[13] = BC.y.c[i,j-1]    # S
+        iV[14] = Num.y.c[i,j+1];   tV[14] = BC.y.c[i,j+1]    # N
+        iV[15] = Num.y.v[i,j];     tV[15] = BC.y.v[i,j]  # SW
+        iV[16] = Num.y.v[i+1,j];   tV[16] = BC.y.v[i+1,j]    # SE
+        iV[17] = Num.y.v[i,j+1];   tV[17] = BC.y.v[i,j+1]    # NW
+        iV[18] = Num.y.v[i+1,j+1]; tV[18] = BC.y.v[i+1,j+1]      # NE
+        #--------------
+        iP[1]  = Num.p.ey[i-1,j];  tP[1]  = BC.p.ey[i-1,j]   # W
+        iP[2]  = Num.p.ey[i,j];    tP[2]  = BC.p.ey[i,j]     # E
+        iP[3]  = Num.p.ex[i,j-1];  tP[3]  = BC.p.ex[i,j-1]   # S   
+        iP[4]  = Num.p.ex[i,j];    tP[4]  = BC.p.ex[i,j]     # N
+        # Vx
+        if BC.x.v[i,j] == 1
+            AddToExtSparse!(Kuu, iV[1], iV[1], tV[1], 1.0)
+        else
+            for i in eachindex(vV)
+                AddToExtSparse!(Kuu, iV[1], iV[i],  tV[i],  vV[i])
+            end
+            #--------------
+            for i in eachindex(vP)
+                AddToExtSparse!(Kup, iV[1], iP[i],  tP[i],  vP[i])
+            end
+        end
+        # Vx
+        if BC.y.v[i,j] == 1
+            AddToExtSparse!(Kuu, iV[10], iV[1], tV[1], 1.0)
+        else
+            for i in eachindex(vV)
+                AddToExtSparse!(Kuu, iV[10], iV[i],  tV[i],  vV[i])
+            end
+            #--------------
+            for i in eachindex(vP)
+                AddToExtSparse!(Kup, iV[10], iP[i],  tP[i],  vP[i])
+            end
         end
     end 
     flush!(Kuu), flush!(Kup)
