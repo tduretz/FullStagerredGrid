@@ -1,6 +1,7 @@
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 using ExtendableSparse
 include("FSG_Rheology.jl")
+include("FSG_Assembly.jl")
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
@@ -8,154 +9,6 @@ include("FSG_Rheology.jl")
 @views   function AddToExtSparse!(K,i,j,Tag, v) 
     if ((j!=-1) || (j==i || Tag==1)) K[i,j]  = v end
 end
-
-@views function AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, nc, nv)
-    i_uu    = zeros(Int, 18); t_uu    = zeros(Int, 18); v_uu   = ones(18)
-    i_up    = zeros(Int,  4); t_up    = zeros(Int,  4); v_up   = ones( 4)
-    i_pu    = zeros(Int,  8); t_pu    = zeros(Int,  8); v_pu   = ones( 8)
-    # Loop on vertices
-    for j in 2:nv.y+1, i in 2:nv.x+1
-        i_uu[1]  = Num.x.v[i,j];     t_uu[1]  = BC.x.v[i,j]      # C
-        i_uu[2]  = Num.x.v[i-1,j];   t_uu[2]  = BC.x.v[i-1,j]    # W
-        i_uu[3]  = Num.x.v[i+1,j];   t_uu[3]  = BC.x.v[i+1,j]    # E
-        i_uu[4]  = Num.x.v[i,j-1];   t_uu[4]  = BC.x.v[i,j-1]    # S
-        i_uu[5]  = Num.x.v[i,j+1];   t_uu[5]  = BC.x.v[i,j+1]    # N
-        i_uu[6]  = Num.x.c[i-1,j-1]; t_uu[6]  = BC.x.c[i-1,j-1]  # SW
-        i_uu[7]  = Num.x.c[i,j-1];   t_uu[7]  = BC.x.c[i,j-1]    # SE
-        i_uu[8]  = Num.x.c[i-1,j];   t_uu[8]  = BC.x.c[i-1,j]    # NW
-        i_uu[9]  = Num.x.c[i,j];     t_uu[9]  = BC.x.c[i,j]      # NE
-        #--------------
-        i_uu[10] = Num.y.v[i,j];     t_uu[10] = BC.y.v[i,j]      # C
-        i_uu[11] = Num.y.v[i-1,j];   t_uu[11] = BC.y.v[i-1,j]    # W
-        i_uu[12] = Num.y.v[i,j];     t_uu[12] = BC.y.v[i,j]      # E
-        i_uu[13] = Num.y.v[i,j-1];   t_uu[13] = BC.y.v[i,j-1]    # S
-        i_uu[14] = Num.y.v[i,j+1];   t_uu[14] = BC.y.v[i,j+1]    # N
-        i_uu[15] = Num.y.c[i-1,j-1]; t_uu[15] = BC.y.c[i-1,j-1]  # SW
-        i_uu[16] = Num.y.c[i,j-1];   t_uu[16] = BC.y.c[i,j-1]    # SE
-        i_uu[17] = Num.y.c[i-1,j];   t_uu[17] = BC.y.c[i-1,j]    # NW
-        i_uu[18] = Num.y.c[i,j];     t_uu[18] = BC.y.c[i,j]      # NE
-        #--------------
-        i_up[1]  = Num.p.ex[i-1,j];  t_up[1]  = BC.p.ex[i-1,j]   # W
-        i_up[2]  = Num.p.ex[i,j-1];  t_up[2]  = BC.p.ex[i,j-1]   # E
-        i_up[3]  = Num.p.ey[i,j-1];  t_up[3]  = BC.p.ey[i,j-1]   # S   
-        i_up[4]  = Num.p.ey[i,j];    t_up[4]  = BC.p.ey[i,j]     # N
-        # Vx
-        if BC.x.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[1], i_uu[1], t_uu[1], 1.0)
-        else
-            for ii in eachindex(v_uu)
-                AddToExtSparse!(Kuu, i_uu[1], i_uu[ii],  t_uu[ii],  v_uu[ii])
-            end
-            #--------------
-            for ii in eachindex(v_up)
-                AddToExtSparse!(Kup, i_uu[1], i_up[ii],  t_up[ii],  v_up[ii])
-            end
-        end
-        # Vx
-        if BC.y.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[10], i_uu[1], t_uu[1], 1.0)
-        else
-            for ii in eachindex(v_uu)
-                AddToExtSparse!(Kuu, i_uu[10], i_uu[ii],  t_uu[ii],  v_uu[ii])
-            end
-            #--------------
-            for ii in eachindex(v_up)
-                AddToExtSparse!(Kup, i_uu[10], i_up[ii],  t_up[ii],  v_up[ii])
-            end
-        end
-    end 
-    # Loop on centroids
-    for j in 2:nc.y+1, i in 2:nc.x+1
-        i_uu[1]  = Num.x.c[i,j];     t_uu[1]  = BC.x.c[i,j]      # C
-        i_uu[2]  = Num.x.c[i-1,j];   t_uu[2]  = BC.x.c[i-1,j]    # W
-        i_uu[3]  = Num.x.c[i+1,j];   t_uu[3]  = BC.x.c[i+1,j]    # E
-        i_uu[4]  = Num.x.c[i,j-1];   t_uu[4]  = BC.x.c[i,j-1]    # S
-        i_uu[5]  = Num.x.c[i,j+1];   t_uu[5]  = BC.x.c[i,j+1]    # N
-        i_uu[6]  = Num.x.v[i,j];     t_uu[6]  = BC.x.v[i,j]  # SW
-        i_uu[7]  = Num.x.v[i+1,j];   t_uu[7]  = BC.x.v[i+1,j]    # SE
-        i_uu[8]  = Num.x.v[i,j+1];   t_uu[8]  = BC.x.v[i,j+1]    # NW
-        i_uu[9]  = Num.x.v[i+1,j+1]; t_uu[9]  = BC.x.v[i+1,j+1]      # NE
-        #--------------
-        i_uu[10] = Num.y.c[i,j];     t_uu[10] = BC.y.c[i,j]      # C
-        i_uu[11] = Num.y.c[i-1,j];   t_uu[11] = BC.y.c[i-1,j]    # W
-        i_uu[12] = Num.y.c[i,j];     t_uu[12] = BC.y.c[i,j]      # E
-        i_uu[13] = Num.y.c[i,j-1];   t_uu[13] = BC.y.c[i,j-1]    # S
-        i_uu[14] = Num.y.c[i,j+1];   t_uu[14] = BC.y.c[i,j+1]    # N
-        i_uu[15] = Num.y.v[i,j];     t_uu[15] = BC.y.v[i,j]  # SW
-        i_uu[16] = Num.y.v[i+1,j];   t_uu[16] = BC.y.v[i+1,j]    # SE
-        i_uu[17] = Num.y.v[i,j+1];   t_uu[17] = BC.y.v[i,j+1]    # NW
-        i_uu[18] = Num.y.v[i+1,j+1]; t_uu[18] = BC.y.v[i+1,j+1]      # NE
-        #--------------
-        i_up[1]  = Num.p.ey[i,j];    t_up[1]  = BC.p.ey[i,j]   # W
-        i_up[2]  = Num.p.ey[i+1,j];  t_up[2]  = BC.p.ey[i+1,j]     # E
-        i_up[3]  = Num.p.ex[i,j];    t_up[3]  = BC.p.ex[i,j]   # S   
-        i_up[4]  = Num.p.ex[i,j+1];  t_up[4]  = BC.p.ex[i,j+1]     # N
-        # Vx
-        if BC.x.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[1], i_uu[1], t_uu[1], 1.0)
-        else
-            for ii in eachindex(v_uu)
-                AddToExtSparse!(Kuu, i_uu[1], i_uu[ii],  t_uu[ii],  v_uu[ii])
-            end
-            #--------------
-            for ii in eachindex(v_up)
-                AddToExtSparse!(Kup, i_uu[1], i_up[ii],  t_up[ii],  v_up[ii])
-            end
-        end
-        # Vx
-        if BC.y.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[10], i_uu[1], t_uu[1], 1.0)
-        else
-            for ii in eachindex(v_uu)
-                AddToExtSparse!(Kuu, i_uu[10], i_uu[ii],  t_uu[ii],  v_uu[ii])
-            end
-            #--------------
-            for ii in eachindex(v_up)
-                AddToExtSparse!(Kup, i_uu[10], i_up[ii],  t_up[ii],  v_up[ii])
-            end
-        end
-    end 
-
-    # Loop on horizontal edges
-    for j in 2:nv.y+1, i in 2:nc.x+1
-        @show i, j
-        @show i_pp    =  Num.p.ex[i,j]
-        #--------------
-        i_pu[1] =  Num.x.v[i,j];   t_pu[1] =  BC.x.v[i,j]   
-        i_pu[2] =  Num.x.v[i+1,j]; t_pu[2] =  BC.x.v[i+1,j] 
-        i_pu[3] =  Num.x.c[i,j-1]; t_pu[3] =  BC.x.c[i,j-1] 
-        i_pu[4] =  Num.x.c[i,j];   t_pu[4] =  BC.x.c[i,j]   
-        #--------------
-        i_pu[5] =  Num.y.v[i,j];   t_pu[5] =  BC.y.v[i,j]   
-        i_pu[6] =  Num.y.v[i+1,j]; t_pu[6] =  BC.y.v[i+1,j] 
-        i_pu[7] =  Num.y.c[i,j-1]; t_pu[7] =  BC.y.c[i,j-1] 
-        i_pu[8] =  Num.y.c[i,j];   t_pu[8] =  BC.y.c[i,j]  
-        for ii in eachindex(v_pu)
-            AddToExtSparse!(Kpu, i_pp, i_pu[ii],  t_pu[ii],  v_pu[ii])
-        end
-    end
-    @show size(Num.p.ex)
-
-
-    # Loop on vertical edges
-    for j in 2:nc.y+1, i in 2:nv.x+1
-        i_pp    =  Num.p.ey[i,j]
-        #--------------
-        i_pu[1] =  Num.x.c[i-1,j]; t_pu[1] =  BC.x.c[i-1,j]   
-        i_pu[2] =  Num.x.c[i,j];   t_pu[2] =  BC.x.c[i,j] 
-        i_pu[3] =  Num.x.v[i,j];   t_pu[3] =  BC.x.v[i,j] 
-        i_pu[4] =  Num.x.v[i,j+1]; t_pu[4] =  BC.x.v[i,j+1]   
-        #--------------
-        i_pu[5] =  Num.y.c[i-1,j]; t_pu[5] =  BC.y.c[i-1,j]   
-        i_pu[6] =  Num.y.c[i,j];   t_pu[6] =  BC.y.c[i,j] 
-        i_pu[7] =  Num.y.v[i,j];   t_pu[7] =  BC.y.v[i,j] 
-        i_pu[8] =  Num.y.v[i,j+1]; t_pu[8] =  BC.y.v[i,j+1]
-        for ii in eachindex(v_pu)
-            AddToExtSparse!(Kpu, i_pp, i_pu[ii],  t_pu[ii],  v_pu[ii])
-        end
-    end
-    flush!(Kuu), flush!(Kup), flush!(Kpu)
-    end
 
 function Main_2D_DI()
     # Physics
@@ -346,15 +199,16 @@ function Main_2D_DI()
     Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
     Kup   = ExtendableSparseMatrix(ndofV, ndofP)
     Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
-    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, nc, nv)
+    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
     println("Touch Kuu and Kup")
-    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, nc, nv)
+    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
     # τ.xy.ey'
     # ε̇.xy.ey'
     # τ.xx.ey'
     # R.y.c'
-    Kpu
+    # display(Kuu)
     # Num.p.ex
+    p=Plots.spy(Kuu)
 end
 
 Main_2D_DI()
