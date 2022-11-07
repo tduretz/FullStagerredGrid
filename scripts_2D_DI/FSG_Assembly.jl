@@ -1,3 +1,6 @@
+@views   function AddToExtSparse!(K,i,j,Tag, v) 
+    if ((Tag==0) || (j==i)) K[i,j]  = v end
+end
 
 @views function CoefficientsKuu_Vx!(v_uu, a, b, c, d, D, dx, dy )
     v_uu[1] = (dx.^2 .*(b.C.*(4*D.D11N.*b.N + 4*D.D11S.*b.S - 2*D.D12N.*b.N - 2*D.D12S.*b.S + 3*D.D13N.*d.N + 3*D.D13S.*d.S) + d.C.*(4*D.D31N.*b.N + 4*D.D31S.*b.S - 2*D.D32N.*b.N - 2*D.D32S.*b.S + 3*D.D33N.*d.N + 3*D.D33S.*d.S)) + dy.^2 .*(a.C.*(4*D.D11E.*a.E + 4*D.D11W.*a.W - 2*D.D12E.*a.E - 2*D.D12W.*a.W + 3*D.D13E.*c.E + 3*D.D13W.*c.W) + c.C.*(4*D.D31E.*a.E + 4*D.D31W.*a.W - 2*D.D32E.*a.E - 2*D.D32W.*a.W + 3*D.D33E.*c.E + 3*D.D33W.*c.W)))./(6*dx.^2 .*dy.^2)
@@ -88,7 +91,7 @@ end
         #--------------
         i_uu[10] = Num.y.v[i,j];     t_uu[10] = BC.y.v[i,j]      # C
         i_uu[11] = Num.y.v[i-1,j];   t_uu[11] = BC.y.v[i-1,j]    # W
-        i_uu[12] = Num.y.v[i,j];     t_uu[12] = BC.y.v[i,j]      # E
+        i_uu[12] = Num.y.v[i+1,j];   t_uu[12] = BC.y.v[i+1,j]    # E
         i_uu[13] = Num.y.v[i,j-1];   t_uu[13] = BC.y.v[i,j-1]    # S
         i_uu[14] = Num.y.v[i,j+1];   t_uu[14] = BC.y.v[i,j+1]    # N
         i_uu[15] = Num.y.c[i-1,j-1]; t_uu[15] = BC.y.c[i-1,j-1]  # SW
@@ -135,7 +138,7 @@ end
         CoefficientsKuu_Vy!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
         CoefficientsKup_Vy!(v_up, c.C, d.C, Δ.x, Δ.y )
         if BC.y.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[10], i_uu[1], t_uu[1], 1.0)
+            AddToExtSparse!(Kuu, i_uu[10], i_uu[10], t_uu[10], 1.0)
         else
             for ii in eachindex(v_uu)
                 AddToExtSparse!(Kuu, i_uu[10], i_uu[ii],  t_uu[ii],  v_uu[ii])
@@ -160,7 +163,7 @@ end
         #--------------
         i_uu[10] = Num.y.c[i,j];     t_uu[10] = BC.y.c[i,j]      # C
         i_uu[11] = Num.y.c[i-1,j];   t_uu[11] = BC.y.c[i-1,j]    # W
-        i_uu[12] = Num.y.c[i,j];     t_uu[12] = BC.y.c[i,j]      # E
+        i_uu[12] = Num.y.c[i+1,j];   t_uu[12] = BC.y.c[i+1,j]    # E
         i_uu[13] = Num.y.c[i,j-1];   t_uu[13] = BC.y.c[i,j-1]    # S
         i_uu[14] = Num.y.c[i,j+1];   t_uu[14] = BC.y.c[i,j+1]    # N
         i_uu[15] = Num.y.v[i,j];     t_uu[15] = BC.y.v[i,j]  # SW
@@ -191,31 +194,23 @@ end
         # Vx
         CoefficientsKuu_Vx!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
         CoefficientsKup_Vx!(v_up, a.C, b.C, Δ.x, Δ.y )
-        if BC.x.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[1], i_uu[1], t_uu[1], 1.0)
-        else
-            for ii in eachindex(v_uu)
-                AddToExtSparse!(Kuu, i_uu[1], i_uu[ii],  t_uu[ii],  v_uu[ii])
-            end
-            #--------------
-            for ii in eachindex(v_up)
-                AddToExtSparse!(Kup, i_uu[1], i_up[ii],  t_up[ii],  v_up[ii])
-            end
+        for ii in eachindex(v_uu)
+            AddToExtSparse!(Kuu, i_uu[1], i_uu[ii],  t_uu[ii],  v_uu[ii])
+        end
+        #--------------
+        for ii in eachindex(v_up)
+            AddToExtSparse!(Kup, i_uu[1], i_up[ii],  t_up[ii],  v_up[ii])
         end
         #--------------
         # Vy 
         CoefficientsKuu_Vy!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
         CoefficientsKup_Vy!(v_up, a.C, b.C, Δ.x, Δ.y )
-        if BC.y.v[i,j] == 1
-            AddToExtSparse!(Kuu, i_uu[10], i_uu[1], t_uu[1], 1.0)
-        else
-            for ii in eachindex(v_uu)
-                AddToExtSparse!(Kuu, i_uu[10], i_uu[ii],  t_uu[ii],  v_uu[ii])
-            end
-            #--------------
-            for ii in eachindex(v_up)
-                AddToExtSparse!(Kup, i_uu[10], i_up[ii],  t_up[ii],  v_up[ii])
-            end
+        for ii in eachindex(v_uu)
+            AddToExtSparse!(Kuu, i_uu[10], i_uu[ii],  t_uu[ii],  v_uu[ii])
+        end
+        #--------------
+        for ii in eachindex(v_up)
+            AddToExtSparse!(Kup, i_uu[10], i_up[ii],  t_up[ii],  v_up[ii])
         end
     end 
     # ==================================== Kpu ==================================== #
