@@ -1,5 +1,6 @@
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 using ExtendableSparse
+import SparseArrays:spdiagm
 include("FSG_Rheology.jl")
 include("FSG_Assembly.jl")
 # Macros
@@ -22,10 +23,12 @@ function Main_2D_DI()
     solve      = true
     comp       = false
     # Numerics
-    nc         = (x=4,     y=4    )  # numerical grid resolution
+    nc         = (x=11,     y=11    )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
-    ε          = 1e-8          # nonlinear tolerance
+    solver     = :pwh_Cholesky
+    ϵ          = 1e-8          # nonlinear tolerance
     iterMax    = 20            # max number of iters
+    penalty    = 1e4
     # Preprocessing
     Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y)
     # Array initialisation
@@ -179,10 +182,15 @@ function Main_2D_DI()
             R.p.ey[i,j] = -∇v.ey[i,j]
         end
     end
+    # Display residuals
+    @printf("Rx = %2.6e\n", max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c )) )
+    @printf("Ry = %2.6e\n", max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c )) )
+    @printf("Rx = %2.6e\n", max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey)) )
+
     # Numbering
     Num      = ( x   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
                  y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
-                 p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
+                 p   = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
 
     Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
     Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
@@ -206,54 +214,79 @@ function Main_2D_DI()
     # R.y.c'
     # display(Kuu)
     # Kuu_fact = CholeskyFactorization(Kuu)
- 
+
+    Kuuj = Kuu.cscmatrix
+    Kupj = Kup.cscmatrix
+    Kpu  = Kpu.cscmatrix
+
+    nV   = maximum(Num.y.c)
+    nP   = maximum(Num.p.ey)
+    fu   = zeros(nV)
+    fp   = zeros(nP)
+    fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
+    fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
+    fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
+    fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
+    fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
+    fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
+
+    Kpp = spdiagm( zeros(nP) )
  
     # Decoupled solve
     if comp==false 
         npdof = maximum(Num.p.ey)
         coef  = zeros(npdof)
         for i in eachindex(coef)
-            coef[i] .= penalty#.*mesh.ke./mesh.Ω
+            coef[i] = penalty#.*mesh.ke./mesh.Ω
         end
         Kppi  = spdiagm(coef)
     else
         Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
     end
-    # Kuusc = Kuuj .- Kupj*(Kppi*Kpu)
-    # if solver==-1 
-    #     t = @elapsed Kf    = CholeskyFactorization((Kuusc))
-    #     @printf("Cholesky took = %02.2e s\n", t)
-    # else
-    #     t = @elapsed Kf    = lu(Kuusc)
-    #     @printf("LU took = %02.2e s\n", t)
-    # end
-    # u     = zeros(length(fu), 1)
-    # ru    = zeros(length(fu), 1)
-    # fusc  = zeros(length(fu), 1)
-    # p     = zeros(length(fp), 1)
-    # rp    = zeros(length(fp), 1)
-    # ######################################
-    # # Iterations
-    # for rit=1:20
-    #     ru   .= fu .- Kuuj*u .- Kupj*p
-    #     rp   .= fp .- Kpu*u  .- Kpp*p
-    #     nrmu, nrmp = norm(ru), norm(rp)
-    #     @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
-    #     if nrmu/sqrt(length(ru)) < tol && nrmp/sqrt(length(ru)) < tol
-    #         break
-    #     end
-    #     fusc .= fu  .- Kupj*(Kppi*fp .+ p)
-    #     u    .= Kf\fusc
-    #     p   .+= Kppi*(fp .- Kpu*u .- Kpp*p)
-    # end
-    # # Post-process solve
-    # Vxh .= u[1:nVx]
-    # Vyh .= u[nVx+1:nVy]
-    # Pe  .= p[:]
+    Kuu_SC = Kuuj .- Kupj*(Kppi*Kpu)
+    if solver == :pwh_Cholesky 
+        t = @elapsed Kf    = cholesky((Kuu_SC))
+        @printf("Cholesky took = %02.2e s\n", t)
+    elseif solver == :pwh_LU 
+        t = @elapsed Kf    = lu(Kuu_SC)
+        @printf("LU took = %02.2e s\n", t)
+    end
+    u     = zeros(nV, 1)
+    ru    = zeros(nV, 1)
+    fusc  = zeros(nV, 1)
+    p     = zeros(nP, 1)
+    rp    = zeros(nP, 1)
+    ######################################
+    # Iterations
+    for rit=1:20
+        ru   .= fu .- Kuuj*u .- Kupj*p
+        rp   .= fp .- Kpu*u  .- Kpp*p
+        nrmu, nrmp = norm(ru), norm(rp)
+        @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
+        if nrmu/sqrt(length(ru)) < ϵ && nrmp/sqrt(length(ru)) < ϵ
+            break
+        end
+        fusc .= fu  .- Kupj*(Kppi*fp .+ p)
+        u    .= Kf\fusc
+        p   .+= Kppi*(fp .- Kpu*u .- Kpp*p)
+    end
+    # Post-process solve
+    V.x.v[2:end-1, 2:end-1] .= u[Num.x.v[2:end-1, 2:end-1]]
+    V.x.c[2:end-1, 2:end-1] .= u[Num.x.c[2:end-1, 2:end-1]]
+    P.ex[2:end-1, 2:end-1]  .= p[Num.p.ex[2:end-1, 2:end-1]]
+    P.ey[2:end-1, 2:end-1]  .= p[Num.p.ey[2:end-1, 2:end-1]]
  
     # Num.p.ex
     # display(BC.y.v)
-    p=Plots.spy(Kuu, c=:RdBu)
+    p=Plots.spy(Kuu_SC, c=:RdBu)
+    display(p)
+    # display( Kpu)
+    # display(Num.p.ex)
+    # display(Num.p.ey)
+    # display(Num.x.v)
+    # display(Num.y.v)
+    # display(Num.x.c)
+    # display(Num.y.c)
 end
 
 Main_2D_DI()
