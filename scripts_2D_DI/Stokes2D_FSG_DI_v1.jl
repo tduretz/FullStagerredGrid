@@ -20,6 +20,7 @@ function Main_2D_DI()
     inclusion  = true
     adapt_mesh = true
     solve      = true
+    comp       = false
     # Numerics
     nc         = (x=4,     y=4    )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
@@ -38,7 +39,7 @@ function Main_2D_DI()
                  xy  = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)) )
     ∇v       = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
     P        = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
-    Dv       = ( v11 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
+    D        = ( v11 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
                  v12 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),  
                  v13 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
                  v21 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
@@ -82,9 +83,9 @@ function Main_2D_DI()
         η.ex[x.ex.^2 .+ (y.ex.-y0).^2 .< rad] .= 100.
         η.ey[x.ey.^2 .+ (y.ey.-y0).^2 .< rad] .= 100.
     end
-    Dv.v11.ex[:,2:end-1] .= 2 .* η.ex; Dv.v11.ey[2:end-1,:] .= 2 .* η.ey
-    Dv.v22.ex[:,2:end-1] .= 2 .* η.ex; Dv.v22.ey[2:end-1,:] .= 2 .* η.ey
-    Dv.v33.ex[:,2:end-1] .= 2 .* η.ex; Dv.v33.ey[2:end-1,:] .= 2 .* η.ey
+    D.v11.ex[:,2:end-1] .= 2 .* η.ex; D.v11.ey[2:end-1,:] .= 2 .* η.ey
+    D.v22.ex[:,2:end-1] .= 2 .* η.ex; D.v22.ey[2:end-1,:] .= 2 .* η.ey
+    D.v33.ex[:,2:end-1] .= 2 .* η.ex; D.v33.ey[2:end-1,:] .= 2 .* η.ey
     # Density
     ρ.v  .= 1.0; ρ.c  .= 1.0
     if inclusion
@@ -127,7 +128,7 @@ function Main_2D_DI()
         BC.y.v[2:end-1,end-1] .= 1
     end
 
-    DevStrainRateStressTensor!( ε̇, τ, Dv, ∇v, V, Δ, ∂ξ, ∂η )
+    DevStrainRateStressTensor!( ε̇, τ, D, ∇v, V, Δ, ∂ξ, ∂η )
     # Loop on vertices
     @time for j in axes(R.x.v, 2), i in axes(R.x.v, 1)
         if i>1 && i<size(R.x.v,1) && j>1 && j<size(R.x.v,2)
@@ -180,8 +181,8 @@ function Main_2D_DI()
     end
     # Numbering
     Num      = ( x   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
-                    y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
-                    p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
+                 y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
+                 p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
 
     Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
     Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
@@ -204,7 +205,52 @@ function Main_2D_DI()
     # τ.xx.ey'
     # R.y.c'
     # display(Kuu)
-    Kuu_fact = CholeskyFactorization(Kuu)
+    # Kuu_fact = CholeskyFactorization(Kuu)
+ 
+ 
+    # Decoupled solve
+    if comp==false 
+        npdof = maximum(Num.p.ey)
+        coef  = zeros(npdof)
+        for i in eachindex(coef)
+            coef[i] .= penalty#.*mesh.ke./mesh.Ω
+        end
+        Kppi  = spdiagm(coef)
+    else
+        Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
+    end
+    # Kuusc = Kuuj .- Kupj*(Kppi*Kpu)
+    # if solver==-1 
+    #     t = @elapsed Kf    = CholeskyFactorization((Kuusc))
+    #     @printf("Cholesky took = %02.2e s\n", t)
+    # else
+    #     t = @elapsed Kf    = lu(Kuusc)
+    #     @printf("LU took = %02.2e s\n", t)
+    # end
+    # u     = zeros(length(fu), 1)
+    # ru    = zeros(length(fu), 1)
+    # fusc  = zeros(length(fu), 1)
+    # p     = zeros(length(fp), 1)
+    # rp    = zeros(length(fp), 1)
+    # ######################################
+    # # Iterations
+    # for rit=1:20
+    #     ru   .= fu .- Kuuj*u .- Kupj*p
+    #     rp   .= fp .- Kpu*u  .- Kpp*p
+    #     nrmu, nrmp = norm(ru), norm(rp)
+    #     @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
+    #     if nrmu/sqrt(length(ru)) < tol && nrmp/sqrt(length(ru)) < tol
+    #         break
+    #     end
+    #     fusc .= fu  .- Kupj*(Kppi*fp .+ p)
+    #     u    .= Kf\fusc
+    #     p   .+= Kppi*(fp .- Kpu*u .- Kpp*p)
+    # end
+    # # Post-process solve
+    # Vxh .= u[1:nVx]
+    # Vyh .= u[nVx+1:nVy]
+    # Pe  .= p[:]
+ 
     # Num.p.ex
     # display(BC.y.v)
     p=Plots.spy(Kuu, c=:RdBu)
