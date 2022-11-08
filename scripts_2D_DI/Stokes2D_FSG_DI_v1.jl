@@ -1,4 +1,4 @@
-using Plots, Printf, LinearAlgebra, SpecialFunctions
+using Plots, Printf, LinearAlgebra, SpecialFunctions, CairoMakie, Makie.GeometryBasics
 using ExtendableSparse
 import SparseArrays:spdiagm
 include("FSG_Rheology.jl")
@@ -7,6 +7,7 @@ include("FSG_Assembly.jl")
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
 @views    ∂_∂(fE,fW,fN,fS,Δ,a,b) = a*(fE - fW) / Δ.x .+ b*(fN - fS) / Δ.y
+@views   avWESN(A,B)  = 0.25.*(A[:,1:end-1] .+ A[:,2:end-0] .+ B[1:end-1,:] .+ B[2:end-0,:])
 
 function Main_2D_DI()
     # Physics
@@ -23,7 +24,7 @@ function Main_2D_DI()
     solve      = true
     comp       = false
     # Numerics
-    nc         = (x=11,     y=11    )  # numerical grid resolution
+    nc         = (x=101,     y=101    )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
     solver     = :pwh_Cholesky
     ϵ          = 1e-8          # nonlinear tolerance
@@ -251,35 +252,35 @@ function Main_2D_DI()
         t = @elapsed Kf    = lu(Kuu_SC)
         @printf("LU took = %02.2e s\n", t)
     end
-    u     = zeros(nV, 1)
+    δu    = zeros(nV, 1)
     ru    = zeros(nV, 1)
     fusc  = zeros(nV, 1)
-    p     = zeros(nP, 1)
+    δp    = zeros(nP, 1)
     rp    = zeros(nP, 1)
     ######################################
     # Iterations
     for rit=1:20
-        ru   .= fu .- Kuuj*u .- Kupj*p
-        rp   .= fp .- Kpu*u  .- Kpp*p
+        ru   .= fu .- Kuuj*δu .- Kupj*δp
+        rp   .= fp .- Kpu *δu .- Kpp *δp
         nrmu, nrmp = norm(ru), norm(rp)
         @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
         if nrmu/sqrt(length(ru)) < ϵ && nrmp/sqrt(length(ru)) < ϵ
             break
         end
-        fusc .= fu  .- Kupj*(Kppi*fp .+ p)
-        u    .= Kf\fusc
-        p   .+= Kppi*(fp .- Kpu*u .- Kpp*p)
+        fusc .= fu  .- Kupj*(Kppi*fp .+ δp)
+        δu   .= Kf\fusc
+        δp  .+= Kppi*(fp .- Kpu*δu .- Kpp*δp)
     end
     # Post-process solve
-    V.x.v[2:end-1, 2:end-1] .= u[Num.x.v[2:end-1, 2:end-1]]
-    V.x.c[2:end-1, 2:end-1] .= u[Num.x.c[2:end-1, 2:end-1]]
-    P.ex[2:end-1, 2:end-1]  .= p[Num.p.ex[2:end-1, 2:end-1]]
-    P.ey[2:end-1, 2:end-1]  .= p[Num.p.ey[2:end-1, 2:end-1]]
+    V.x.v[2:end-1, 2:end-1] .+= δu[Num.x.v[2:end-1, 2:end-1]]
+    V.x.c[2:end-1, 2:end-1] .+= δu[Num.x.c[2:end-1, 2:end-1]]
+    P.ex[2:end-1, 2:end-1]  .+= δp[Num.p.ex[2:end-1, 2:end-1]]
+    P.ey[2:end-1, 2:end-1]  .+= δp[Num.p.ey[2:end-1, 2:end-1]]
  
     # Num.p.ex
     # display(BC.y.v)
-    p=Plots.spy(Kuu_SC, c=:RdBu)
-    display(p)
+    # p=Plots.spy(Kuu_SC, c=:RdBu)
+    # display(p)
     # display( Kpu)
     # display(Num.p.ex)
     # display(Num.p.ey)
@@ -287,6 +288,11 @@ function Main_2D_DI()
     # display(Num.y.v)
     # display(Num.x.c)
     # display(Num.y.c)
+    # Generate data
+    vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
+    verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
+    sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    PatchPlotMakie(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
 end
 
 Main_2D_DI()

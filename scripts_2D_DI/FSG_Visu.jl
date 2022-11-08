@@ -1,4 +1,4 @@
-function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y2; cmap = :turbo, write_fig=false )
+function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax; cmap = :turbo, write_fig=false )
     f   = CairoMakie.Figure(resolution = (1200, 1000))
 
     ar = (xmax - xmin) / (ymax - ymin)
@@ -16,7 +16,7 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # CairoMakie.Axis(f[2,2], aspect = ar)
     # min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
