@@ -1,6 +1,8 @@
 @views   function AddToExtSparse!(K, i, j, Tag_i, Tag_j, v) 
-    if ((Tag_j==0) || (j==i && Tag_i==1)) K[i,j]  = v end
+    if ((Tag_j==0 || Tag_j==2) || (j==i && Tag_i==1)) K[i,j]  = v end
 end
+
+####################
 
 @views function CoefficientsKuu_Vx!(v_uu, a, b, c, d, D, dx, dy )
     v_uu[1] = (dx.^2 .*(b.C.*(4*D.D11N.*b.N + 4*D.D11S.*b.S - 2*D.D12N.*b.N - 2*D.D12S.*b.S + 3*D.D13N.*d.N + 3*D.D13S.*d.S) + d.C.*(4*D.D31N.*b.N + 4*D.D31S.*b.S - 2*D.D32N.*b.N - 2*D.D32S.*b.S + 3*D.D33N.*d.N + 3*D.D33S.*d.S)) + dy.^2 .*(a.C.*(4*D.D11E.*a.E + 4*D.D11W.*a.W - 2*D.D12E.*a.E - 2*D.D12W.*a.W + 3*D.D13E.*c.E + 3*D.D13W.*c.W) + c.C.*(4*D.D31E.*a.E + 4*D.D31W.*a.W - 2*D.D32E.*a.E - 2*D.D32W.*a.W + 3*D.D33E.*c.E + 3*D.D33W.*c.W)))./(6*dx.^2 .*dy.^2)
@@ -23,12 +25,46 @@ end
     v_uu[18] = (-a.C.*(-2*D.D11E.*d.E + 4*D.D12E.*d.E + 3*D.D13E.*b.E) - b.C.*(-2*D.D11N.*c.N + 4*D.D12N.*c.N + 3*D.D13N.*a.N) - c.C.*(-2*D.D31E.*d.E + 4*D.D32E.*d.E + 3*D.D33E.*b.E) - d.C.*(-2*D.D31N.*c.N + 4*D.D32N.*c.N + 3*D.D33N.*a.N))./(6*dx.*dy)
 end
 
+@views function CoefficientsKuu_Vx_FreeSurf!(v_uu, a, b, c, d, D, dx, dy )
+    v_uu[1] = (2*dx.^2 .*(b.C.*(4*D.D11S.*b.S - 2*D.D12S.*b.S + 3*D.D13S.*d.S) + d.C.*(4*D.D31S.*b.S - 2*D.D32S.*b.S + 3*D.D33S.*d.S)) + dy.^2 .*(a.C.*(2*D.D11E.*(4*a.E - d.E) + 2*D.D11W.*(4*a.W - d.W) - 4*D.D12E.*(a.E - d.E) - 4*D.D12W.*(a.W - d.W) + 3*D.D13E.*(b.E + 2*c.E) + 3*D.D13W.*(b.W + 2*c.W)) + c.C.*(2*D.D31E.*(4*a.E - d.E) + 2*D.D31W.*(4*a.W - d.W) - 4*D.D32E.*(a.E - d.E) - 4*D.D32W.*(a.W - d.W) + 3*D.D33E.*(b.E + 2*c.E) + 3*D.D33W.*(b.W + 2*c.W))))./(12*dx.^2 .*dy.^2)
+    v_uu[2] = (-a.C.*(2*D.D11W.*(4*a.W - d.W) - 4*D.D12W.*(a.W - d.W) + 3*D.D13W.*(b.W + 2*c.W)) - c.C.*(2*D.D31W.*(4*a.W - d.W) - 4*D.D32W.*(a.W - d.W) + 3*D.D33W.*(b.W + 2*c.W)))./(12*dx.^2)
+    v_uu[3] = (-a.C.*(2*D.D11E.*(4*a.E - d.E) - 4*D.D12E.*(a.E - d.E) + 3*D.D13E.*(b.E + 2*c.E)) - c.C.*(2*D.D31E.*(4*a.E - d.E) - 4*D.D32E.*(a.E - d.E) + 3*D.D33E.*(b.E + 2*c.E)))./(12*dx.^2)
+    v_uu[4] = (-b.C.*(4*D.D11S.*b.S - 2*D.D12S.*b.S + 3*D.D13S.*d.S) - d.C.*(4*D.D31S.*b.S - 2*D.D32S.*b.S + 3*D.D33S.*d.S))./(6*dy.^2)
+    v_uu[5] = 0
+    v_uu[6] = (-b.C.*(4*D.D11S.*a.S - 2*D.D12S.*a.S + 3*D.D13S.*c.S) - d.C.*(4*D.D31S.*a.S - 2*D.D32S.*a.S + 3*D.D33S.*c.S))./(6*dx.*dy)
+    v_uu[7] = (b.C.*(4*D.D11S.*a.S - 2*D.D12S.*a.S + 3*D.D13S.*c.S) + d.C.*(4*D.D31S.*a.S - 2*D.D32S.*a.S + 3*D.D33S.*c.S))./(6*dx.*dy)
+    v_uu[8] = 0
+    v_uu[9] = 0
+    v_uu[10] = (dx.^2 .*(b.C.*(-2*D.D11S.*d.S + 4*D.D12S.*d.S + 3*D.D13S.*b.S) + d.C.*(-2*D.D31S.*d.S + 4*D.D32S.*d.S + 3*D.D33S.*b.S)) + dy.^2 .*(a.C.*(-2*D.D11E.*(2*b.E + c.E) - 2*D.D11W.*(2*b.W + c.W) + 2*D.D12E.*(b.E + 2*c.E) + 2*D.D12W.*(b.W + 2*c.W) + 3*D.D13E.*(a.E - d.E) + 3*D.D13W.*(a.W - d.W)) + c.C.*(-2*D.D31E.*(2*b.E + c.E) - 2*D.D31W.*(2*b.W + c.W) + 2*D.D32E.*(b.E + 2*c.E) + 2*D.D32W.*(b.W + 2*c.W) + 3*D.D33E.*(a.E - d.E) + 3*D.D33W.*(a.W - d.W))))./(6*dx.^2 .*dy.^2)
+    v_uu[11] = (-a.C.*(-2*D.D11W.*(2*b.W + c.W) + 2*D.D12W.*(b.W + 2*c.W) + 3*D.D13W.*(a.W - d.W)) - c.C.*(-2*D.D31W.*(2*b.W + c.W) + 2*D.D32W.*(b.W + 2*c.W) + 3*D.D33W.*(a.W - d.W)))./(6*dx.^2)
+    v_uu[12] = (-a.C.*(-2*D.D11E.*(2*b.E + c.E) + 2*D.D12E.*(b.E + 2*c.E) + 3*D.D13E.*(a.E - d.E)) - c.C.*(-2*D.D31E.*(2*b.E + c.E) + 2*D.D32E.*(b.E + 2*c.E) + 3*D.D33E.*(a.E - d.E)))./(6*dx.^2)
+    v_uu[13] = (-b.C.*(-2*D.D11S.*d.S + 4*D.D12S.*d.S + 3*D.D13S.*b.S) - d.C.*(-2*D.D31S.*d.S + 4*D.D32S.*d.S + 3*D.D33S.*b.S))./(6*dy.^2)
+    v_uu[14] = 0
+    v_uu[15] = (-b.C.*(-2*D.D11S.*c.S + 4*D.D12S.*c.S + 3*D.D13S.*a.S) - d.C.*(-2*D.D31S.*c.S + 4*D.D32S.*c.S + 3*D.D33S.*a.S))./(6*dx.*dy)
+    v_uu[16] = (b.C.*(-2*D.D11S.*c.S + 4*D.D12S.*c.S + 3*D.D13S.*a.S) + d.C.*(-2*D.D31S.*c.S + 4*D.D32S.*c.S + 3*D.D33S.*a.S))./(6*dx.*dy)
+    v_uu[17] = 0
+    v_uu[18] = 0
+end
+
+####################
+
 @views function CoefficientsKup_Vx!(v_up, aC, bC, dx, dy )
     v_up[1] = -aC./dx
     v_up[2] = aC./dx
     v_up[3] = -bC./dy
     v_up[4] = bC./dy
 end
+
+@views function CoefficientsKup_Vx_FreeSurf!(v_up, a, b, c, d, D, dx, dy )
+    eta_W = D.D11W/2
+    eta_E = D.D11E/2
+    v_up[1] = 0*( (-8*a.C.*eta_W + a.C.*(-2*D.D11W.*d.W + 4*D.D12W.*d.W + 3*D.D13W.*b.W) + c.C.*(-2*D.D31W.*d.W + 4*D.D32W.*d.W + 3*D.D33W.*b.W))./(8*dx.*eta_W) )
+    v_up[2] = 0*( ( 8*a.C.*eta_E - a.C.*(-2*D.D11E.*d.E + 4*D.D12E.*d.E + 3*D.D13E.*b.E) - c.C.*(-2*D.D31E.*d.E + 4*D.D32E.*d.E + 3*D.D33E.*b.E))./(8*dx.*eta_E) )
+    v_up[3] = -b.C./dy
+    v_up[4] = b.C./dy
+end
+
+####################
 
 # Same as V part?
 @views function CoefficientsKuu_Vy!(v_uu, a, b, c, d, D, dx, dy )
@@ -54,12 +90,46 @@ end
     v_uu[18] = (-a.C.*(-2*D.D31E.*d.E + 4*D.D32E.*d.E + 3*D.D33E.*b.E) - b.C.*(-2*D.D31N.*c.N + 4*D.D32N.*c.N + 3*D.D33N.*a.N) - c.C.*(-2*D.D21E.*d.E + 4*D.D22E.*d.E + 3*D.D23E.*b.E) - d.C.*(-2*D.D21N.*c.N + 4*D.D22N.*c.N + 3*D.D23N.*a.N))./(6*dx.*dy)
 end
 
+@views function CoefficientsKuu_Vy_FreeSurf!(v_uu, a, b, c, d, D, dx, dy )
+    v_uu[1] = (2*dx.^2 .*(b.C.*(4*D.D31S.*b.S - 2*D.D32S.*b.S + 3*D.D33S.*d.S) + d.C.*(4*D.D21S.*b.S - 2*D.D22S.*b.S + 3*D.D23S.*d.S)) + dy.^2 .*(a.C.*(2*D.D31E.*(4*a.E - d.E) + 2*D.D31W.*(4*a.W - d.W) - 4*D.D32E.*(a.E - d.E) - 4*D.D32W.*(a.W - d.W) + 3*D.D33E.*(b.E + 2*c.E) + 3*D.D33W.*(b.W + 2*c.W)) + c.C.*(2*D.D21E.*(4*a.E - d.E) + 2*D.D21W.*(4*a.W - d.W) - 4*D.D22E.*(a.E - d.E) - 4*D.D22W.*(a.W - d.W) + 3*D.D23E.*(b.E + 2*c.E) + 3*D.D23W.*(b.W + 2*c.W))))./(12*dx.^2 .*dy.^2)
+    v_uu[2] = (-a.C.*(2*D.D31W.*(4*a.W - d.W) - 4*D.D32W.*(a.W - d.W) + 3*D.D33W.*(b.W + 2*c.W)) - c.C.*(2*D.D21W.*(4*a.W - d.W) - 4*D.D22W.*(a.W - d.W) + 3*D.D23W.*(b.W + 2*c.W)))./(12*dx.^2)
+    v_uu[3] = (-a.C.*(2*D.D31E.*(4*a.E - d.E) - 4*D.D32E.*(a.E - d.E) + 3*D.D33E.*(b.E + 2*c.E)) - c.C.*(2*D.D21E.*(4*a.E - d.E) - 4*D.D22E.*(a.E - d.E) + 3*D.D23E.*(b.E + 2*c.E)))./(12*dx.^2)
+    v_uu[4] = (-b.C.*(4*D.D31S.*b.S - 2*D.D32S.*b.S + 3*D.D33S.*d.S) - d.C.*(4*D.D21S.*b.S - 2*D.D22S.*b.S + 3*D.D23S.*d.S))./(6*dy.^2)
+    v_uu[5] = 0
+    v_uu[6] = (-b.C.*(4*D.D31S.*a.S - 2*D.D32S.*a.S + 3*D.D33S.*c.S) - d.C.*(4*D.D21S.*a.S - 2*D.D22S.*a.S + 3*D.D23S.*c.S))./(6*dx.*dy)
+    v_uu[7] = (b.C.*(4*D.D31S.*a.S - 2*D.D32S.*a.S + 3*D.D33S.*c.S) + d.C.*(4*D.D21S.*a.S - 2*D.D22S.*a.S + 3*D.D23S.*c.S))./(6*dx.*dy)
+    v_uu[8] = 0
+    v_uu[9] = 0
+    v_uu[10] = (dx.^2 .*(b.C.*(-2*D.D31S.*d.S + 4*D.D32S.*d.S + 3*D.D33S.*b.S) + d.C.*(-2*D.D21S.*d.S + 4*D.D22S.*d.S + 3*D.D23S.*b.S)) + dy.^2 .*(a.C.*(-2*D.D31E.*(2*b.E + c.E) - 2*D.D31W.*(2*b.W + c.W) + 2*D.D32E.*(b.E + 2*c.E) + 2*D.D32W.*(b.W + 2*c.W) + 3*D.D33E.*(a.E - d.E) + 3*D.D33W.*(a.W - d.W)) + c.C.*(-2*D.D21E.*(2*b.E + c.E) - 2*D.D21W.*(2*b.W + c.W) + 2*D.D22E.*(b.E + 2*c.E) + 2*D.D22W.*(b.W + 2*c.W) + 3*D.D23E.*(a.E - d.E) + 3*D.D23W.*(a.W - d.W))))./(6*dx.^2 .*dy.^2)
+    v_uu[11] = (-a.C.*(-2*D.D31W.*(2*b.W + c.W) + 2*D.D32W.*(b.W + 2*c.W) + 3*D.D33W.*(a.W - d.W)) - c.C.*(-2*D.D21W.*(2*b.W + c.W) + 2*D.D22W.*(b.W + 2*c.W) + 3*D.D23W.*(a.W - d.W)))./(6*dx.^2)
+    v_uu[12] = (-a.C.*(-2*D.D31E.*(2*b.E + c.E) + 2*D.D32E.*(b.E + 2*c.E) + 3*D.D33E.*(a.E - d.E)) - c.C.*(-2*D.D21E.*(2*b.E + c.E) + 2*D.D22E.*(b.E + 2*c.E) + 3*D.D23E.*(a.E - d.E)))./(6*dx.^2)
+    v_uu[13] = (-b.C.*(-2*D.D31S.*d.S + 4*D.D32S.*d.S + 3*D.D33S.*b.S) - d.C.*(-2*D.D21S.*d.S + 4*D.D22S.*d.S + 3*D.D23S.*b.S))./(6*dy.^2)
+    v_uu[14] = 0
+    v_uu[15] = (-b.C.*(-2*D.D31S.*c.S + 4*D.D32S.*c.S + 3*D.D33S.*a.S) - d.C.*(-2*D.D21S.*c.S + 4*D.D22S.*c.S + 3*D.D23S.*a.S))./(6*dx.*dy)
+    v_uu[16] = (b.C.*(-2*D.D31S.*c.S + 4*D.D32S.*c.S + 3*D.D33S.*a.S) + d.C.*(-2*D.D21S.*c.S + 4*D.D22S.*c.S + 3*D.D23S.*a.S))./(6*dx.*dy)
+    v_uu[17] = 0
+    v_uu[18] = 0
+end
+
+####################
+
 @views function CoefficientsKup_Vy!(v_up, cC, dC, dx, dy )
     v_up[1] = -cC./dx
     v_up[2] = cC./dx
     v_up[3] = -dC./dy
     v_up[4] = dC./dy
 end
+
+@views function CoefficientsKup_Vy_FreeSurf!(v_up, a, b, c, d, D, dx, dy )
+    eta_W = D.D22W/2
+    eta_E = D.D22E/2
+    v_up[1] = 0*( ( a.C.*(-2*D.D31W.*d.W + 4*D.D32W.*d.W + 3*D.D33W.*b.W) - 8*c.C.*eta_W + c.C.*(-2*D.D21W.*d.W + 4*D.D22W.*d.W + 3*D.D23W.*b.W))./(8*dx.*eta_W) )
+    v_up[2] = 0*( (-a.C.*(-2*D.D31E.*d.E + 4*D.D32E.*d.E + 3*D.D33E.*b.E) + 8*c.C.*eta_E - c.C.*(-2*D.D21E.*d.E + 4*D.D22E.*d.E + 3*D.D23E.*b.E))./(8*dx.*eta_E) )
+    v_up[3] = -d.C./dy
+    v_up[4] = d.C./dy                                                
+end
+
+####################
 
 @views function CoefficientsKpu!(v_pu,aC,bC,cC,dC,dx,dy)
     v_pu[1] = -aC./dx
@@ -71,6 +141,18 @@ end
     v_pu[7] = -dC./dy
     v_pu[8] = dC./dy
     # v_pu[9] = 1./(K.*dt)
+end
+
+@views function CoefficientsKpu_FreeSurf!(v_pu,aC,bC,cC,dC,dx,dy)
+    v_pu[1] = (-aC + bC - dC/2)./dx
+    v_pu[2] = (aC - bC + dC/2)./dx
+    v_pu[3] = 0
+    v_pu[4] = 0
+    v_pu[5] = -cC./dx
+    v_pu[6] = cC./dx
+    v_pu[7] = 0
+    v_pu[8] = 0
+    # v_pu[9] = 3*dC./(4*eta_C) + 1./(K.*dt)
 end
 
 @views function AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
@@ -121,8 +203,15 @@ end
         d = (C=∂η.∂y.v[i,j], W=∂η.∂y.ex[i-1,j], E=∂η.∂y.ex[i,j], S=∂η.∂y.ey[i,j-1], N=∂η.∂y.ey[i,j])
         #--------------
         # Vx
-        CoefficientsKuu_Vx!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
-        CoefficientsKup_Vx!(v_up, a.C, b.C, Δ.x, Δ.y )
+        if BC.x.v[i,j] == 0
+            CoefficientsKuu_Vx!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
+            CoefficientsKup_Vx!(v_up, a.C, b.C, Δ.x, Δ.y )
+        elseif BC.x.v[i,j] == 2
+            println("FREE x")
+            CoefficientsKuu_Vx_FreeSurf!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
+            CoefficientsKup_Vx_FreeSurf!(v_up, a, b, c, d, D_sten, Δ.x, Δ.y )
+        end
+        # Dirichlets
         if BC.x.v[i,j] == 1
             AddToExtSparse!(Kuu, i_uu[1], i_uu[1], BC.x.v[i,j], t_uu[1], 1.0)
         else
@@ -136,8 +225,15 @@ end
         end
         #--------------
         # Vy
-        CoefficientsKuu_Vy!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
-        CoefficientsKup_Vy!(v_up, c.C, d.C, Δ.x, Δ.y )
+        if BC.y.v[i,j] == 0
+            CoefficientsKuu_Vy!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
+            CoefficientsKup_Vy!(v_up, c.C, d.C, Δ.x, Δ.y )
+        elseif BC.x.v[i,j] == 2
+            println("FREE y")
+            CoefficientsKuu_Vy_FreeSurf!(v_uu, a, b, c, d, D_sten, Δ.x, Δ.y )
+            CoefficientsKup_Vy_FreeSurf!(v_up, a, b, c, d, D_sten, Δ.x, Δ.y )
+        end
+        # Dirichlets
         if BC.y.v[i,j] == 1
             AddToExtSparse!(Kuu, i_uu[10], i_uu[10], BC.y.v[i,j], t_uu[10], 1.0)
         else
@@ -229,7 +325,12 @@ end
         i_pu[7] =  Num.y.c[i,j-1]; t_pu[7] =  BC.y.c[i,j-1] 
         i_pu[8] =  Num.y.c[i,j];   t_pu[8] =  BC.y.c[i,j]
         #--------------
-        CoefficientsKpu!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], Δ.x, Δ.y)
+        if BC.p.ex[i,j] == 0
+            CoefficientsKpu!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], Δ.x, Δ.y)
+        else BC.p.ex[i,j] == 2
+            println("fripé!")
+            CoefficientsKpu_FreeSurf!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], Δ.x, Δ.y)
+        end
         #--------------  
         for ii in eachindex(v_pu)
             AddToExtSparse!(Kpu, i_pp, i_pu[ii], BC.p.ex[i,j],  t_pu[ii],  v_pu[ii])

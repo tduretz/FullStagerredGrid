@@ -13,8 +13,6 @@ include("FSG_Visu.jl")
 
 function Main_2D_DI()
     # Physics
-    # x          = (min=-3.0, max=3.0)  
-    # y          = (min=-5.0, max=0.0)
     x          = (min=-3.0, max=3.0)  
     y          = (min=-3.0, max=3.0)
     ε̇bg        = -1.0
@@ -25,6 +23,7 @@ function Main_2D_DI()
     adapt_mesh = true
     solve      = true
     comp       = false
+    PS         = false
     # Numerics
     nc         = (x=101,     y=101    )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
@@ -61,37 +60,36 @@ function Main_2D_DI()
     R        = ( x   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)), 
                  y   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)),
                  p   = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)) ) 
-    ρ        = ( (v  = zeros(nv.x,   nv.y), c  = zeros(nc.x+2, nc.y+2)) )
-    η        = (        ex = zeros(nc.x+2, nv.y), ey = zeros(nv.x,   nc.y+2)  )
+    ρ        = ( (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) )
+    η        = (  ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)  )
     BC       = (x = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
                 y = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
-                p = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2))  )
+                p = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)), 
+                ε̇ = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
     Num      = ( x   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
                  y   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)),
                  p   = (ex = -1*ones(Int, nc.x+2, nv.y), ey = -1*ones(Int, nv.x,   nc.y+2)) )
     # Fine mesh
-    xxv, yyv    = LinRange(x.min-Δ.x/2, x.max+Δ.x/2, 2nc.x+3), LinRange(y.min-Δ.y/2, y.max+Δ.y/2, 2nc.y+3)
+    xxv, yyv    = LinRange(x.min-Δ.x/2, x.max+Δ.x/2, 2nc.x+5), LinRange(y.min-Δ.y/2, y.max+Δ.y/2, 2nc.y+5)
     (xv4,yv4) = ([x for x=xxv,y=yyv], [y for x=xxv,y=yyv])
-    xv2_1, yv2_1 = xv4[2:2:end-1,2:2:end-1  ], yv4[2:2:end-1,2:2:end-1  ]
-    xv2_2, yv2_2 = xv4[1:2:end-0,1:2:end-0  ], yv4[1:2:end-0,1:2:end-0  ]
-    xc2_1, yc2_1 = xv4[3:2:end-2,2:2:end-1  ], yv4[3:2:end-2,2:2:end-1  ]
-    xc2_2, yc2_2 = xv4[2:2:end-1,3:2:end-2+2], yv4[2:2:end-1,3:2:end-2+2]
-    x = merge(x, (v=xv4[2:2:end-1,2:2:end-1  ], c=xv4[1:2:end-0,1:2:end-0  ], ex=xv4[1:2:end,2:2:end-1  ], ey=xv4[2:2:end-1,1:2:end]) ) 
-    y = merge(x, (v=yv4[2:2:end-1,2:2:end-1  ], c=yv4[1:2:end-0,1:2:end-0  ], ex=yv4[1:2:end,2:2:end-1  ], ey=yv4[2:2:end-1,1:2:end]) ) 
+    xv2_1, yv2_1 = xv4[3:2:end-2,3:2:end-2  ], yv4[3:2:end-2,3:2:end-2  ]
+    xv2_2, yv2_2 = xv4[2:2:end-1,2:2:end-1  ], yv4[2:2:end-1,1:2:end-1  ]
+    # xc2_1, yc2_1 = xv4[3:2:end-2,2:2:end-1  ], yv4[3:2:end-2,2:2:end-1  ]
+    # xc2_2, yc2_2 = xv4[2:2:end-1,3:2:end-2+2], yv4[2:2:end-1,3:2:end-2+2]
+    x = merge(x, (v=xv4[1:2:end-0,1:2:end-0], c=xv4[2:2:end-1,2:2:end-1], ex=xv4[2:2:end-1,1:2:end-0  ], ey=xv4[1:2:end-0,2:2:end-1]) ) 
+    y = merge(y, (v=yv4[1:2:end-0,1:2:end-0], c=yv4[2:2:end-1,2:2:end-1], ex=yv4[2:2:end-1,1:2:end-0  ], ey=yv4[1:2:end-0,2:2:end-1]) )  
     # Velocity
-    V.x.v[2:end-1,2:end-1] .= -ε̇bg.*x.v; V.x.c .= -ε̇bg.*x.c
-    V.y.v[2:end-1,2:end-1] .=  ε̇bg.*y.v; V.y.c .=  ε̇bg.*y.c
-    # V.x.v[2:end-1,2:end-1] .=  ε̇bg.*y.v; V.x.c .=  ε̇bg.*y.c
-    # V.y.v[2:end-1,2:end-1] .=  ε̇bg.*x.v; V.y.c .=  ε̇bg.*x.c
+    V.x.v .= -PS*ε̇bg.*x.v .+ (1-PS)*ε̇bg.*y.v; V.x.c .= -PS*ε̇bg.*x.c .+ (1-PS)*ε̇bg.*y.c
+    V.y.v .=  PS*ε̇bg.*y.v;                    V.y.c .=  PS*ε̇bg.*y.c
     # Viscosity
     η.ex  .= 1.0; η.ey  .= 1.0
     if inclusion
         η.ex[x.ex.^2 .+ (y.ex.-y0).^2 .< rad] .= 100.
         η.ey[x.ey.^2 .+ (y.ey.-y0).^2 .< rad] .= 100.
     end
-    D.v11.ex[:,2:end-1] .= 2 .* η.ex; D.v11.ey[2:end-1,:] .= 2 .* η.ey
-    D.v22.ex[:,2:end-1] .= 2 .* η.ex; D.v22.ey[2:end-1,:] .= 2 .* η.ey
-    D.v33.ex[:,2:end-1] .= 2 .* η.ex; D.v33.ey[2:end-1,:] .= 2 .* η.ey
+    D.v11.ex .= 2 .* η.ex;      D.v11.ey .= 2 .* η.ey
+    D.v22.ex .= 2 .* η.ex;      D.v22.ey .= 2 .* η.ey
+    D.v33.ex .= 2 .* η.ex;      D.v33.ey .= 2 .* η.ey
     # Density
     ρ.v  .= 1.0; ρ.c  .= 1.0
     if inclusion
@@ -101,12 +99,13 @@ function Main_2D_DI()
     # Boundary conditions
     BCVx = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
     BCVy = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
-    BC.x.v[2:end-1,2:end-1] .= 0 # inner points
-    BC.y.v[2:end-1,2:end-1] .= 0 # inner points
-    BC.x.c[2:end-1,2:end-1] .= 0 # inner points
-    BC.y.c[2:end-1,2:end-1] .= 0 # inner points
+    BC.x.v[2:end-1,2:end-1]  .= 0 # inner points
+    BC.y.v[2:end-1,2:end-1]  .= 0 # inner points
+    BC.x.c[2:end-1,2:end-1]  .= 0 # inner points
+    BC.y.c[2:end-1,2:end-1]  .= 0 # inner points
     BC.p.ex[2:end-1,2:end-1] .= 0 # inner points
     BC.p.ey[2:end-1,2:end-1] .= 0 # inner points
+    BC.ε̇.ey[2:end-1,2:end-1] .= 0 # inner points
     # Vx
     if BCVx.West == :Dirichlet 
         BC.x.v[2,2:end-1] .= 1
@@ -136,7 +135,7 @@ function Main_2D_DI()
 
     for iter=1:niter
 
-        DevStrainRateStressTensor!( ε̇, τ, D, ∇v, V, Δ, ∂ξ, ∂η )
+        DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
         LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
         # Display residuals
         err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))

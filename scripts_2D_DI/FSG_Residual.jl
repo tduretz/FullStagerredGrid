@@ -1,6 +1,6 @@
 @views function LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
     # Loop on vertices
-    @time for j in axes(R.x.v, 2), i in axes(R.x.v, 1)
+    for j in axes(R.x.v, 2), i in axes(R.x.v, 1)
         if i>1 && i<size(R.x.v,1) && j>1 && j<size(R.x.v,2)
             # Stencil
             τxxW = τ.xx.ex[i-1,j]; τyyW = τ.yy.ex[i-1,j]; τxyW = τ.xy.ex[i-1,j]; PW   = P.ex[i-1,j]; 
@@ -23,7 +23,7 @@
         end
     end 
     # Loop on centroids
-    @time for j in axes(R.x.c, 2), i in axes(R.x.c, 1)
+    for j in axes(R.x.c, 2), i in axes(R.x.c, 1)
         if i>1 && i<size(R.x.c,1) && j>1 && j<size(R.x.c,2)
             # Stencil
             τxxW = τ.xx.ey[i,j];   τyyW = τ.yy.ey[i,j];   τxyW = τ.xy.ey[i,j];   PW   = P.ey[i,j]
@@ -38,13 +38,13 @@
         end
     end 
     # Loop on horizontal edges
-    @time for j in axes(R.p.ex, 2), i in axes(R.p.ex, 1)
+    for j in axes(R.p.ex, 2), i in axes(R.p.ex, 1)
         if i>1 && i<size(R.p.ex, 1)
             R.p.ex[i,j] = -∇v.ex[i,j]
         end
     end
     # Loop on vertical edges
-    @time for j in axes(R.p.ey, 2), i in axes(R.p.ey, 1)
+    for j in axes(R.p.ey, 2), i in axes(R.p.ey, 1)
         if j>1 && j<size(R.p.ey, 2)
             R.p.ey[i,j] = -∇v.ey[i,j]
         end

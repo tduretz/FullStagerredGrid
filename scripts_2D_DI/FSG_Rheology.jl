@@ -1,6 +1,6 @@
-@views function DevStrainRateStressTensor!( ε̇, τ, D, ∇v, V, Δ, ∂ξ, ∂η )
+@views function DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
     @time for j in axes(ε̇.xx.ex, 2), i in axes(ε̇.xx.ex, 1)
-         if i>1 && i<size(ε̇.xx.ex,1) && j>1 && j<size(ε̇.xx.ex,2)
+         if BC.p.ex[i,j] == 0
             # Velocity gradient
             ∂Vx∂ξ = (V.x.v[i+1,j] - V.x.v[i,j]  ) / Δ.x
             ∂Vx∂η = (V.x.c[i,j]   - V.x.c[i,j-1]) / Δ.y
@@ -22,14 +22,21 @@
          end
      end
      @time for j in axes(ε̇.xx.ey, 2), i in axes(ε̇.xx.ey, 1)
-         if i>1 && i<size(ε̇.xx.ey,1) && j>1 && j<size(ε̇.xx.ey,2)
-            # Velocity gradient
-            ∂Vx∂ξ = (V.x.c[i,j]   - V.x.c[i-1,j]) / Δ.x
-            ∂Vx∂η = (V.x.v[i,j+1] - V.x.v[i,j]  ) / Δ.y
+        if BC.p.ey[i,j] != -1
+            if BC.ε̇.ey[i,j] == 0
+                # Velocity gradient
+                ∂Vx∂ξ = (V.x.c[i,j]   - V.x.c[i-1,j]) / Δ.x
+                ∂Vy∂ξ = (V.y.c[i,j]   - V.y.c[i-1,j]) / Δ.x 
+                ∂Vx∂η = (V.x.v[i,j+1] - V.x.v[i,j]  ) / Δ.y
+                ∂Vy∂η = (V.y.v[i,j+1] - V.y.v[i,j]  ) / Δ.y
+            elseif BC.ε̇.ey[i,j] == 2
+                ∂Vx∂ξ = (V.x.c[i,j]   - V.x.c[i-1,j]) / Δ.x
+                ∂Vy∂ξ = (V.y.c[i,j]   - V.y.c[i-1,j]) / Δ.x  
+                ∂Vx∂η = -∂Vy∂ξ
+                ∂Vy∂η = 1//2*∂Vx∂ξ + 3//4*P.ey[i,j]/(D.v11.ey[i,j]/2)
+            end
             ∂Vx∂x = ∂_∂1(∂Vx∂ξ, ∂Vx∂η, ∂ξ.∂x.ey[i,j], ∂η.∂x.ey[i,j]) 
             ∂Vx∂y = ∂_∂1(∂Vx∂ξ, ∂Vx∂η, ∂ξ.∂y.ey[i,j], ∂η.∂y.ey[i,j]) 
-            ∂Vy∂ξ = (V.y.c[i,j]   - V.y.c[i-1,j]) / Δ.x  
-            ∂Vy∂η = (V.y.v[i,j+1] - V.y.v[i,j]  ) / Δ.y
             ∂Vy∂x = ∂_∂1(∂Vy∂ξ, ∂Vy∂η, ∂ξ.∂x.ey[i,j], ∂η.∂x.ey[i,j])
             ∂Vy∂y = ∂_∂1(∂Vy∂ξ, ∂Vy∂η, ∂ξ.∂y.ey[i,j], ∂η.∂y.ey[i,j])
             # Deviatoric strain rate
