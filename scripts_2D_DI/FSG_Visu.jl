@@ -13,10 +13,16 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax; cmap = :turbo
     # CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # CairoMakie.Axis(f[2,1], aspect = ar)
-    min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
+    # min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    # CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+
+    # min_v = minimum( sol.p ); max_v = maximum( sol.p )
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
+    CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+
 
     # CairoMakie.Axis(f[2,2], aspect = ar)
     # min_v = minimum( sol.vy ); max_v = maximum( sol.vy )

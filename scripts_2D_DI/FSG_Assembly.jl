@@ -24,10 +24,10 @@ end
 end
 
 @views function CoefficientsKup_Vx!(v_up, aC, bC, dx, dy )
-    v_up[1] = aC./dx
-    v_up[2] = -aC./dx
-    v_up[3] = bC./dy
-    v_up[4] = -bC./dy
+    v_up[1] = -aC./dx
+    v_up[2] = aC./dx
+    v_up[3] = -bC./dy
+    v_up[4] = bC./dy
 end
 
 # Same as V part?
@@ -55,21 +55,22 @@ end
 end
 
 @views function CoefficientsKup_Vy!(v_up, cC, dC, dx, dy )
-    v_up[1] = cC./dx
-    v_up[2] = -cC./dx
-    v_up[3] = dC./dy
-    v_up[4] = -dC./dy
+    v_up[1] = -cC./dx
+    v_up[2] = cC./dx
+    v_up[3] = -dC./dy
+    v_up[4] = dC./dy
 end
 
 @views function CoefficientsKpu!(v_pu,aC,bC,cC,dC,dx,dy)
-    v_pu[1] = aC./dx
-    v_pu[2] = -aC./dx
-    v_pu[3] = bC./dy
-    v_pu[4] = -bC./dy
-    v_pu[5] = cC./dx
-    v_pu[6] = -cC./dx
-    v_pu[7] = dC./dy
-    v_pu[8] = -dC./dy
+    v_pu[1] = -aC./dx
+    v_pu[2] = aC./dx
+    v_pu[3] = -bC./dy
+    v_pu[4] = bC./dy
+    v_pu[5] = -cC./dx
+    v_pu[6] = cC./dx
+    v_pu[7] = -dC./dy
+    v_pu[8] = dC./dy
+    # v_pu[9] = 1./(K.*dt)
 end
 
 @views function AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)

@@ -3,10 +3,12 @@ using ExtendableSparse
 import SparseArrays:spdiagm
 include("FSG_Rheology.jl")
 include("FSG_Assembly.jl")
+include("FSG_Visu.jl")
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
 @views    ∂_∂(fE,fW,fN,fS,Δ,a,b) = a*(fE - fW) / Δ.x .+ b*(fN - fS) / Δ.y
+@views    ∂_∂1(∂f∂ξ,∂f∂η, a,b) = a*∂f∂ξ .+ b*∂f∂η
 @views   avWESN(A,B)  = 0.25.*(A[:,1:end-1] .+ A[:,2:end-0] .+ B[1:end-1,:] .+ B[2:end-0,:])
 
 function Main_2D_DI()
@@ -136,162 +138,8 @@ function Main_2D_DI()
         BC.y.v[2:end-1,end-1] .= 2
     end
 
-    # DevStrainRateStressTensor!( ε̇, τ, D, ∇v, V, Δ, ∂ξ, ∂η )
-    # # Loop on vertices
-    # @time for j in axes(R.x.v, 2), i in axes(R.x.v, 1)
-    #     if i>1 && i<size(R.x.v,1) && j>1 && j<size(R.x.v,2)
-    #         # Stencil
-    #         τxxW = τ.xx.ex[i-1,j]; τyyW = τ.yy.ex[i-1,j]; τxyW = τ.xy.ex[i-1,j]; PW   = P.ex[i-1,j]; 
-    #         τxxE = τ.xx.ex[i,j];   τyyE = τ.yy.ex[i,j];   τxyE = τ.xy.ex[i,j];   PE   = P.ex[i,j];   
-    #         τxxS = τ.xx.ey[i,j-1]; τyyS = τ.yy.ey[i,j-1]; τxyS = τ.xy.ey[i,j-1]; PS   = P.ey[i,j-1]; 
-    #         τxxN = τ.xx.ey[i,j];   τyyN = τ.yy.ey[i,j];   τxyN = τ.xy.ey[i,j];   PN   = P.ey[i,j];      
-    #         ∂ξ∂x = ∂ξ.∂x.v[i,j];   ∂ξ∂y = ∂ξ.∂y.v[i,j];   ∂η∂x = ∂η.∂x.v[i,j];   ∂η∂y = ∂η.∂y.v[i,j]
-    #         # x
-    #         if BC.x.v[i,j] == 1
-    #             R.x.v[i,j] = 0.
-    #         else
-    #             R.x.v[i,j] = - (∂_∂(τxxE,τxxW,τxxN,τxxS,Δ,∂ξ∂x,∂η∂x) + ∂_∂(τxyE,τxyW,τxyN,τxyS,Δ,∂ξ∂y,∂η∂y) - ∂_∂(PE,PW,PN,PS,Δ,∂ξ∂x,∂η∂x) + ρ.v[i,j]*g.x )
-    #         end
-    #         # y
-    #         if BC.x.v[i,j] == 1
-    #             R.x.v[i,j] = 0.
-    #         else
-    #             R.y.v[i,j] = - (∂_∂(τyyE,τyyW,τyyN,τyyS,Δ,∂ξ∂y,∂η∂y) + ∂_∂(τxyE,τxyW,τxyN,τxyS,Δ,∂ξ∂x,∂η∂x) - ∂_∂(PE,PW,PN,PS,Δ,∂ξ∂y,∂η∂y) + ρ.v[i,j]*g.z) 
-    #         end
-    #     end
-    # end 
-    # # Loop on centroids
-    # @time for j in axes(R.x.c, 2), i in axes(R.x.c, 1)
-    #     if i>1 && i<size(R.x.c,1) && j>1 && j<size(R.x.c,2)
-    #         # Stencil
-    #         τxxW = τ.xx.ey[i,j];   τyyW = τ.yy.ey[i,j];   τxyW = τ.xy.ey[i,j];   PW   = P.ey[i,j]
-    #         τxxE = τ.xx.ey[i+1,j]; τyyE = τ.yy.ey[i+1,j]; τxyE = τ.xy.ey[i+1,j]; PE   = P.ey[i+1,j]
-    #         τxxS = τ.xx.ex[i,j];   τyyS = τ.yy.ex[i,j];   τxyS = τ.xy.ex[i,j];   PS   = P.ex[i,j]
-    #         τxxN = τ.xx.ex[i,j+1]; τyyN = τ.yy.ex[i,j+1]; τxyN = τ.xy.ex[i,j+1]; PN   = P.ex[i,j+1]
-    #         ∂ξ∂x = ∂ξ.∂x.v[i,j];   ∂ξ∂y = ∂ξ.∂y.v[i,j];   ∂η∂x = ∂η.∂x.c[i,j];   ∂η∂y = ∂η.∂y.c[i,j]
-    #         # x
-    #         R.x.c[i,j] = - (∂_∂(τxxE,τxxW,τxxN,τxxS,Δ,∂ξ∂x,∂η∂x) + ∂_∂(τxyE,τxyW,τxyN,τxyS,Δ,∂ξ∂y,∂η∂y) - ∂_∂(PE,PW,PN,PS,Δ,∂ξ∂x,∂η∂x) + ρ.v[i,j]*g.x)
-    #         # y
-    #         R.y.c[i,j] = - (∂_∂(τyyE,τyyW,τyyN,τyyS,Δ,∂ξ∂y,∂η∂y) + ∂_∂(τxyE,τxyW,τxyN,τxyS,Δ,∂ξ∂x,∂η∂x) - ∂_∂(PE,PW,PN,PS,Δ,∂ξ∂y,∂η∂y) + ρ.v[i,j]*g.z) 
-    #     end
-    # end 
-    # # Loop on horizontal edges
-    # @time for j in axes(R.p.ex, 2), i in axes(R.p.ex, 1)
-    #     if i>1 && i<size(R.p.ex, 1)
-    #         R.p.ex[i,j] = -∇v.ex[i,j]
-    #     end
-    # end
-    # # Loop on horizontal edges
-    # @time for j in axes(R.p.ey, 2), i in axes(R.p.ey, 1)
-    #     if j>1 && j<size(R.p.ey, 2)
-    #         R.p.ey[i,j] = -∇v.ey[i,j]
-    #     end
-    # end
-    # # Display residuals
-    # @printf("Rx = %2.6e\n", max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c )) )
-    # @printf("Ry = %2.6e\n", max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c )) )
-    # @printf("Rx = %2.6e\n", max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey)) )
+    DevStrainRateStressTensor!( ε̇, τ, D, ∇v, V, Δ, ∂ξ, ∂η )
 
-    # # Numbering
-    # Num      = ( x   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
-    #              y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
-    #              p   = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
-
-    # Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
-    # Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
-    # Num.x.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.y.v)
-    # Num.y.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.x.c)
-    # Num.p.ex[2:end-1,2:end-1] .= reshape(1:((nc.x)*(nv.y)), nc.x, nv.y) 
-    # Num.p.ey[2:end-1,2:end-1] .= reshape(1:((nv.x)*(nc.y)), nv.x, nc.y) .+ maximum(Num.p.ex)
-    # # Initial sparse
-    # println("Initial Assembly")
-    # ndofV = maximum(Num.y.c)
-    # ndofP = maximum(Num.p.ey)
-    # Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
-    # Kup   = ExtendableSparseMatrix(ndofV, ndofP)
-    # Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
-    # @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
-    # println("Touch Kuu and Kup")
-    # @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
-    # # τ.xy.ey'
-    # # ε̇.xy.ey'
-    # # τ.xx.ey'
-    # # R.y.c'
-    # # display(Kuu)
-    # # Kuu_fact = CholeskyFactorization(Kuu)
-
-    # Kuuj = Kuu.cscmatrix
-    # Kupj = Kup.cscmatrix
-    # Kpu  = Kpu.cscmatrix
-
-    # nV   = maximum(Num.y.c)
-    # nP   = maximum(Num.p.ey)
-    # fu   = zeros(nV)
-    # fp   = zeros(nP)
-    # fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
-    # fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
-    # fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
-    # fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
-    # fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
-    # fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
-
-    # Kpp = spdiagm( zeros(nP) )
- 
-    # # Decoupled solve
-    # if comp==false 
-    #     npdof = maximum(Num.p.ey)
-    #     coef  = zeros(npdof)
-    #     for i in eachindex(coef)
-    #         coef[i] = penalty#.*mesh.ke./mesh.Ω
-    #     end
-    #     Kppi  = spdiagm(coef)
-    # else
-    #     Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
-    # end
-    # Kuu_SC = Kuuj .- Kupj*(Kppi*Kpu)
-    # if solver == :pwh_Cholesky 
-    #     t = @elapsed Kf    = cholesky((Kuu_SC))
-    #     @printf("Cholesky took = %02.2e s\n", t)
-    # elseif solver == :pwh_LU 
-    #     t = @elapsed Kf    = lu(Kuu_SC)
-    #     @printf("LU took = %02.2e s\n", t)
-    # end
-    # δu    = zeros(nV, 1)
-    # ru    = zeros(nV, 1)
-    # fusc  = zeros(nV, 1)
-    # δp    = zeros(nP, 1)
-    # rp    = zeros(nP, 1)
-    # ######################################
-    # # Iterations
-    # for rit=1:20
-    #     ru   .= fu .- Kuuj*δu .- Kupj*δp
-    #     rp   .= fp .- Kpu *δu .- Kpp *δp
-    #     nrmu, nrmp = norm(ru), norm(rp)
-    #     @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
-    #     if nrmu/sqrt(length(ru)) < ϵ && nrmp/sqrt(length(ru)) < ϵ
-    #         break
-    #     end
-    #     fusc .= fu  .- Kupj*(Kppi*fp .+ δp)
-    #     δu   .= Kf\fusc
-    #     δp  .+= Kppi*(fp .- Kpu*δu .- Kpp*δp)
-    # end
-    # # Post-process solve
-    # V.x.v[2:end-1, 2:end-1] .+= δu[Num.x.v[2:end-1, 2:end-1]]
-    # V.x.c[2:end-1, 2:end-1] .+= δu[Num.x.c[2:end-1, 2:end-1]]
-    # P.ex[2:end-1, 2:end-1]  .+= δp[Num.p.ex[2:end-1, 2:end-1]]
-    # P.ey[2:end-1, 2:end-1]  .+= δp[Num.p.ey[2:end-1, 2:end-1]]
- 
-    # # Num.p.ex
-    # # display(BC.y.v)
-    # # p=Plots.spy(Kuu_SC, c=:RdBu)
-    # # display(p)
-    # # display( Kpu)
-    # # display(Num.p.ex)
-    # # display(Num.p.ey)
-    # display(BC.x.v)
-    # display(BC.y.v)
-    # # display(Num.x.c)
-    # # display(Num.y.c)
     # # Generate data
     # vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     # verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
