@@ -3,6 +3,7 @@ using ExtendableSparse
 import SparseArrays:spdiagm
 include("FSG_Rheology.jl")
 include("FSG_Assembly.jl")
+include("FSG_Residual.jl")
 include("FSG_Visu.jl")
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
@@ -23,16 +24,17 @@ function Main_2D_DI()
     adapt_mesh = true
     solve      = true
     comp       = false
-    PS         = false
+    PS         = true
     # Numerics
-    nc         = (x=101,     y=101    )  # numerical grid resolution
+    nc         = (x=100,     y=100   )  # numerical grid resolution
+    # nc         = (x=101,     y=101    )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
-    solver     = :pwh_Cholesky
+    solver     = :PH_Cholesky
     ϵ          = 1e-8          # nonlinear tolerance
     niter      = 10            # max number of iters
     penalty    = 1e4
     # Preprocessing
-    Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y)
+    Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y, t=1.0)
     # Array initialisation
     V        = ( x   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)),  # v: vertices --- c: centroids
                  y   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) ) 
@@ -150,9 +152,9 @@ function Main_2D_DI()
         end
 
         # Numbering
-        Num      = ( x   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
-                     y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
-                     p   = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2, nc.y+2)) )
+        Num      = ( x   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
+                     y   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
+                     p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2, nc.y+2)) )
  
         Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
         Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
@@ -167,9 +169,10 @@ function Main_2D_DI()
         Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
         Kup   = ExtendableSparseMatrix(ndofV, ndofP)
         Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
-        @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+        Kpp   = ExtendableSparseMatrix(ndofP, ndofP)
+        @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
         # println("Touch Kuu and Kup")
-        # @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+        # @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
         # τ.xy.ey'
         # ε̇.xy.ey'
         # τ.xx.ey'
@@ -206,10 +209,10 @@ function Main_2D_DI()
             Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
         end
         Kuu_SC = Kuuj .- Kupj*(Kppi*Kpu)
-        if solver == :pwh_Cholesky 
+        if solver == :PH_Cholesky 
             t = @elapsed Kf    = cholesky((Kuu_SC))
             @printf("Cholesky took = %02.2e s\n", t)
-        elseif solver == :pwh_LU 
+        elseif solver == :PH_LU 
             t = @elapsed Kf    = lu(Kuu_SC)
             @printf("LU took = %02.2e s\n", t)
         end
@@ -239,8 +242,16 @@ function Main_2D_DI()
         V.y.c[2:end-1, 2:end-1] .-= δu[Num.y.c[2:end-1, 2:end-1]]
         P.ex[2:end-1, 2:end-1]  .-= δp[Num.p.ex[2:end-1, 2:end-1]]
         P.ey[2:end-1, 2:end-1]  .-= δp[Num.p.ey[2:end-1, 2:end-1]]
+
+        # @show Kup.+Kpu'
+
+        # p=Plots.spy(Kuu_SC, c=:RdBu,  size=(600,600))
+        # p=Plots.spy(Kup.+Kpu', c=:RdBu,  size=(600,600))
+
+        # display(p)
     
     end
+
     # Generate data
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 

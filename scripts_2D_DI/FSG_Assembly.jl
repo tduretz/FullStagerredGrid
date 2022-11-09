@@ -131,7 +131,7 @@ end
 
 ####################
 
-@views function CoefficientsKpu!(v_pu,aC,bC,cC,dC,dx,dy)
+@views function CoefficientsKpu!(v_pu,aC,bC,cC,dC,K,dx,dy,dt)
     v_pu[1] = -aC./dx
     v_pu[2] = aC./dx
     v_pu[3] = -bC./dy
@@ -140,10 +140,10 @@ end
     v_pu[6] = cC./dx
     v_pu[7] = -dC./dy
     v_pu[8] = dC./dy
-    # v_pu[9] = 1./(K.*dt)
+    v_pu[9] = 1 ./(K.*dt)
 end
 
-@views function CoefficientsKpu_FreeSurf!(v_pu,aC,bC,cC,dC,dx,dy)
+@views function CoefficientsKpu_FreeSurf!(v_pu,aC,bC,cC,dC,K,eta_C,dx,dy,dt)
     v_pu[1] = (-aC + bC - dC/2)./dx
     v_pu[2] = (aC - bC + dC/2)./dx
     v_pu[3] = 0
@@ -152,13 +152,15 @@ end
     v_pu[6] = cC./dx
     v_pu[7] = 0
     v_pu[8] = 0
-    # v_pu[9] = 3*dC./(4*eta_C) + 1./(K.*dt)
+    v_pu[9] = 3*dC./(4*eta_C) + 1 ./(K.*dt)
 end
 
-@views function AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+@views function AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
     i_uu    = zeros(Int, 18); t_uu    = zeros(Int, 18); v_uu   = ones(18)
     i_up    = zeros(Int,  4); t_up    = zeros(Int,  4); v_up   = ones( 4)
-    i_pu    = zeros(Int,  8); t_pu    = zeros(Int,  8); v_pu   = ones( 8)
+    i_pu    = zeros(Int,  9); t_pu    = zeros(Int,  9); v_pu   = ones( 9)
+    # Fake compressebility
+    K = 1e10
     # ==================================== Kuu, Kup ==================================== #
     # Loop on vertices
     for j in 2:nv.y+1, i in 2:nv.x+1
@@ -325,16 +327,19 @@ end
         i_pu[7] =  Num.y.c[i,j-1]; t_pu[7] =  BC.y.c[i,j-1] 
         i_pu[8] =  Num.y.c[i,j];   t_pu[8] =  BC.y.c[i,j]
         #--------------
+        i_pu[9] =  Num.p.ex[i,j];  t_pu[9] =  BC.p.ex[i,j]
+        #--------------
         if BC.p.ex[i,j] == 0
-            CoefficientsKpu!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], Δ.x, Δ.y)
+            CoefficientsKpu!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], K,  Δ.x, Δ.y, Δ.t)
         else BC.p.ex[i,j] == 2
             println("fripé!")
-            CoefficientsKpu_FreeSurf!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], Δ.x, Δ.y)
+            CoefficientsKpu_FreeSurf!(v_pu, ∂ξ.∂x.ex[i,j], ∂ξ.∂y.ex[i,j], ∂η.∂x.ex[i,j], ∂η.∂y.ex[i,j], K, D.v11.ex[i,j]/2, Δ.x, Δ.y, Δ.t)
         end
         #--------------  
-        for ii in eachindex(v_pu)
+        for ii=1:8
             AddToExtSparse!(Kpu, i_pp, i_pu[ii], BC.p.ex[i,j],  t_pu[ii],  v_pu[ii])
         end
+        AddToExtSparse!(Kpp, i_pp, i_pu[9], BC.p.ey[i,j], t_pu[9],  v_pu[9])
     end
 
     # Loop on vertical edges
@@ -351,11 +356,14 @@ end
         i_pu[7] =  Num.y.v[i,j];   t_pu[7] =  BC.y.v[i,j] 
         i_pu[8] =  Num.y.v[i,j+1]; t_pu[8] =  BC.y.v[i,j+1]
         #--------------
-        CoefficientsKpu!(v_pu, ∂ξ.∂x.ey[i,j], ∂ξ.∂y.ey[i,j], ∂η.∂x.ey[i,j], ∂η.∂y.ey[i,j], Δ.x, Δ.y)
+        i_pu[9] =  Num.p.ey[i,j];  t_pu[9] =  BC.p.ey[i,j]
         #--------------
-        for ii in eachindex(v_pu)
+        CoefficientsKpu!(v_pu, ∂ξ.∂x.ey[i,j], ∂ξ.∂y.ey[i,j], ∂η.∂x.ey[i,j], ∂η.∂y.ey[i,j], K, Δ.x, Δ.y, Δ.t)
+        #--------------
+        for ii=1:8
             AddToExtSparse!(Kpu, i_pp, i_pu[ii], BC.p.ey[i,j], t_pu[ii],  v_pu[ii])
         end
+        AddToExtSparse!(Kpp, i_pp, i_pu[9], BC.p.ey[i,j], t_pu[9],  v_pu[9])
     end
-    flush!(Kuu), flush!(Kup), flush!(Kpu)
+    flush!(Kuu), flush!(Kup), flush!(Kpu), flush!(Kpp)
 end

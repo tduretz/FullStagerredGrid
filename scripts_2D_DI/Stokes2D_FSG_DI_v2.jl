@@ -3,6 +3,7 @@ using ExtendableSparse
 import SparseArrays:spdiagm
 include("FSG_Rheology.jl")
 include("FSG_Assembly.jl")
+include("FSG_Residual.jl")
 include("FSG_Visu.jl")
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
@@ -13,27 +14,28 @@ include("FSG_Visu.jl")
 
 function Main_2D_DI()
     # Physics
-    # x          = (min=-3.0, max=3.0)  
-    # y          = (min=-5.0, max=0.0)
     x          = (min=-3.0, max=3.0)  
-    y          = (min=-3.0, max=3.0)
-    ε̇bg        = -0.1
+    y          = (min=-5.0, max=0.0)
+    # x          = (min=-3.0, max=3.0)  
+    # y          = (min=-3.0, max=3.0)
+    ε̇bg        = -0.0
     rad        = 0.5
-    y0         = -2*0.
+    y0         = -2.0*1.0
     g          = (x = 0., z=-1.0)
     inclusion  = true
     adapt_mesh = true
     solve      = true
     comp       = false
+    PS         = true
     # Numerics
-    nc         = (x=4,     y=4    )  # numerical grid resolution
+    nc         = (x=40,    y=40   )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
-    solver     = :pwh_Cholesky
+    solver     = :PH_Cholesky
     ϵ          = 1e-8          # nonlinear tolerance
     iterMax    = 20            # max number of iters
     penalty    = 1e4
     # Preprocessing
-    Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y)
+    Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y, t=1.0)
     # Array initialisation
     V        = ( x   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)),  # v: vertices --- c: centroids
                  y   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) ) 
@@ -80,8 +82,8 @@ function Main_2D_DI()
     x = merge(x, (v=xv4[1:2:end-0,1:2:end-0], c=xv4[2:2:end-1,2:2:end-1], ex=xv4[2:2:end-1,1:2:end-0  ], ey=xv4[1:2:end-0,2:2:end-1]) ) 
     y = merge(y, (v=yv4[1:2:end-0,1:2:end-0], c=yv4[2:2:end-1,2:2:end-1], ex=yv4[2:2:end-1,1:2:end-0  ], ey=yv4[1:2:end-0,2:2:end-1]) ) 
     # Velocity
-    V.x.v .= -ε̇bg.*x.v; V.x.c .= -ε̇bg.*x.c
-    V.y.v .=  ε̇bg.*y.v; V.y.c .=  ε̇bg.*y.c
+    V.x.v .= -PS*ε̇bg.*x.v .+ (1-PS)*ε̇bg.*y.v; V.x.c .= -PS*ε̇bg.*x.c .+ (1-PS)*ε̇bg.*y.c
+    V.y.v .=  PS*ε̇bg.*y.v;                    V.y.c .=  PS*ε̇bg.*y.c
     # Viscosity
     η.ex  .= 1.0; η.ey  .= 1.0
     if inclusion
@@ -149,9 +151,9 @@ function Main_2D_DI()
     LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
 
     # Numbering
-    Num      = ( x   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
-                 y   = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
-                 p   = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2, nc.y+2)) )
+    Num      = ( x   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
+                 y   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
+                 p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2, nc.y+2)) )
 
     Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
     Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
@@ -166,11 +168,13 @@ function Main_2D_DI()
     Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
     Kup   = ExtendableSparseMatrix(ndofV, ndofP)
     Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
-    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+    Kpp   = ExtendableSparseMatrix(ndofP, ndofP)
+    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
 
     Kuuj = Kuu.cscmatrix
         Kupj = Kup.cscmatrix
-        Kpu  = Kpu.cscmatrix
+        Kpuj  = Kpu.cscmatrix
+        Kppj  = Kpp.cscmatrix
 
         nV   = maximum(Num.y.c)
         nP   = maximum(Num.p.ey)
@@ -196,21 +200,33 @@ function Main_2D_DI()
         else
             Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
         end
-        Kuu_SC = Kuuj .- Kupj*(Kppi*Kpu)
+        Kuu_SC = Kuuj .- Kupj*(Kppi*Kpuj)
+
+        #################
+        K  = [Kuuj Kupj; Kpuj Kppj]
+        f  = [fu; fp]
+        δx = K\f
+
+        V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
+        V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
+        V.x.c[2:end-1, 2:end-1] .-= δx[Num.x.c[2:end-1, 2:end-1]]
+        V.y.c[2:end-1, 2:end-1] .-= δx[Num.y.c[2:end-1, 2:end-1]]
+        P.ex[2:end-1, 2:end-1]  .-= δx[Num.p.ex[2:end-1, 2:end-1].+maximum(Num.y.c)]
+        P.ey[2:end-1, 2:end-1]  .-= δx[Num.p.ey[2:end-1, 2:end-1].+maximum(Num.y.c)]
 
         # p=Plots.spy(Kuuj, c=:RdBu)
         # p=Plots.spy(Kpu, c=:RdBu)
-        p=Plots.spy(Kuu_SC, c=:RdBu)
-        display(p)
-        cholesky(Kuu_SC)
-
-    Kuu
-    # BC.p.ex
-    # # Generate data
-    # vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
-    # verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    # sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
-    # PatchPlotMakie(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
+        # p=Plots.spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
+        # @show dropzeros!(Kuuj.-Kuuj')
+        # @show dropzeros!(Kupj.+Kpuj')
+        # display(p)
+        # cholesky(Kuu_SC)
+        
+    # Generate data
+    vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
+    verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
+    sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    PatchPlotMakie(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
 end
 
 Main_2D_DI()
