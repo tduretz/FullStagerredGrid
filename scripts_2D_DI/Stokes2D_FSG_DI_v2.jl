@@ -172,55 +172,55 @@ function Main_2D_DI()
     @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
 
     Kuuj = Kuu.cscmatrix
-        Kupj = Kup.cscmatrix
-        Kpuj  = Kpu.cscmatrix
-        Kppj  = Kpp.cscmatrix
+    Kupj = Kup.cscmatrix
+    Kpuj  = Kpu.cscmatrix
+    Kppj  = Kpp.cscmatrix
 
-        nV   = maximum(Num.y.c)
-        nP   = maximum(Num.p.ey)
-        fu   = zeros(nV)
-        fp   = zeros(nP)
-        fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
-        fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
-        fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
-        fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
-        fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
-        fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
+    nV   = maximum(Num.y.c)
+    nP   = maximum(Num.p.ey)
+    fu   = zeros(nV)
+    fp   = zeros(nP)
+    fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
+    fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
+    fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
+    fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
+    fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
+    fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
 
-        Kpp = spdiagm( zeros(nP) )
-    
-        # Decoupled solve
-        if comp==false 
-            npdof = maximum(Num.p.ey)
-            coef  = zeros(npdof)
-            for i in eachindex(coef)
-                coef[i] = penalty#.*mesh.ke./mesh.Ω
-            end
-            Kppi  = spdiagm(coef)
-        else
-            Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
+    Kpp = spdiagm( zeros(nP) )
+
+    # Decoupled solve
+    if comp==false 
+        npdof = maximum(Num.p.ey)
+        coef  = zeros(npdof)
+        for i in eachindex(coef)
+            coef[i] = penalty#.*mesh.ke./mesh.Ω
         end
-        Kuu_SC = Kuuj .- Kupj*(Kppi*Kpuj)
+        Kppi  = spdiagm(coef)
+    else
+        Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
+    end
+    Kuu_SC = Kuuj .- Kupj*(Kppi*Kpuj)
 
-        #################
-        K  = [Kuuj Kupj; Kpuj Kppj]
-        f  = [fu; fp]
-        δx = K\f
+    #################
+    K  = [Kuuj Kupj; Kpuj Kppj]
+    f  = [fu; fp]
+    δx = K\f
 
-        V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
-        V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
-        V.x.c[2:end-1, 2:end-1] .-= δx[Num.x.c[2:end-1, 2:end-1]]
-        V.y.c[2:end-1, 2:end-1] .-= δx[Num.y.c[2:end-1, 2:end-1]]
-        P.ex[2:end-1, 2:end-1]  .-= δx[Num.p.ex[2:end-1, 2:end-1].+maximum(Num.y.c)]
-        P.ey[2:end-1, 2:end-1]  .-= δx[Num.p.ey[2:end-1, 2:end-1].+maximum(Num.y.c)]
+    V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
+    V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
+    V.x.c[2:end-1, 2:end-1] .-= δx[Num.x.c[2:end-1, 2:end-1]]
+    V.y.c[2:end-1, 2:end-1] .-= δx[Num.y.c[2:end-1, 2:end-1]]
+    P.ex[2:end-1, 2:end-1]  .-= δx[Num.p.ex[2:end-1, 2:end-1].+maximum(Num.y.c)]
+    P.ey[2:end-1, 2:end-1]  .-= δx[Num.p.ey[2:end-1, 2:end-1].+maximum(Num.y.c)]
 
-        # p=Plots.spy(Kuuj, c=:RdBu)
-        # p=Plots.spy(Kpu, c=:RdBu)
-        # p=Plots.spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
-        # @show dropzeros!(Kuuj.-Kuuj')
-        # @show dropzeros!(Kupj.+Kpuj')
-        # display(p)
-        # cholesky(Kuu_SC)
+    # p=Plots.spy(Kuuj, c=:RdBu)
+    # p=Plots.spy(Kpu, c=:RdBu)
+    # p=Plots.spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
+    @show dropzeros!(Kuuj.-Kuuj')
+    @show dropzeros!(Kupj.+Kpuj')
+    # display(p)
+    # cholesky(Kuu_SC)
         
     # Generate data
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 

@@ -144,15 +144,15 @@ end
 end
 
 @views function CoefficientsKpu_FreeSurf!(v_pu,aC,bC,cC,dC,K,eta_C,dx,dy,dt)
-    v_pu[1] = (-aC + bC - dC/2)./dx
-    v_pu[2] = (aC - bC + dC/2)./dx
+    v_pu[1] = (-aC - dC / 2) ./ dx
+    v_pu[2] = (aC + dC / 2) ./ dx
     v_pu[3] = 0
     v_pu[4] = 0
-    v_pu[5] = -cC./dx
-    v_pu[6] = cC./dx
+    v_pu[5] = (bC - cC) ./ dx
+    v_pu[6] = (-bC + cC) ./ dx
     v_pu[7] = 0
     v_pu[8] = 0
-    v_pu[9] = 3*dC./(4*eta_C) + 1 ./(K.*dt)
+    v_pu[9] = (3 // 4) * dC ./ eta_C + 1 ./ (K .* dt)
 end
 
 @views function AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
