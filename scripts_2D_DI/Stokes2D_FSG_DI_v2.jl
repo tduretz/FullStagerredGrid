@@ -22,13 +22,13 @@ function Main_2D_DI()
     rad        = 0.5
     y0         = -2.0*1.0
     g          = (x = 0., z=-1.0)
-    inclusion  = true
+    inclusion  = false
     adapt_mesh = true
     solve      = true
     comp       = false
     PS         = true
     # Numerics
-    nc         = (x=40,    y=40   )  # numerical grid resolution
+    nc         = (x=21,    y=21   )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1)  # numerical grid resolution
     solver     = :PH_Cholesky
     ϵ          = 1e-8          # nonlinear tolerance
@@ -87,8 +87,8 @@ function Main_2D_DI()
     # Viscosity
     η.ex  .= 1.0; η.ey  .= 1.0
     if inclusion
-        η.ex[x.ex.^2 .+ (y.ex.-y0).^2 .< rad] .= 100.
-        η.ey[x.ey.^2 .+ (y.ey.-y0).^2 .< rad] .= 100.
+        # η.ex[x.ex.^2 .+ (y.ex.-y0).^2 .< rad] .= 100.
+        # η.ey[x.ey.^2 .+ (y.ey.-y0).^2 .< rad] .= 100.
     end
     D.v11.ex .= 2 .* η.ex;      D.v11.ey .= 2 .* η.ey
     D.v22.ex .= 2 .* η.ex;      D.v22.ey .= 2 .* η.ey
@@ -149,7 +149,17 @@ function Main_2D_DI()
 
     DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
     LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
-
+    # Display residuals
+    err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
+    err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
+    err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
+    @printf("Rx = %2.9e\n", err_x )
+    @printf("Ry = %2.9e\n", err_y )
+    @printf("Rp = %2.9e\n", err_p )
+    # if err_x<ϵ && err_y<ϵ && err_p<ϵ
+    #     @printf("Converged!\n")
+    #     break
+    # end
     # Numbering
     Num      = ( x   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
                  y   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
@@ -214,18 +224,80 @@ function Main_2D_DI()
     P.ex[2:end-1, 2:end-1]  .-= δx[Num.p.ex[2:end-1, 2:end-1].+maximum(Num.y.c)]
     P.ey[2:end-1, 2:end-1]  .-= δx[Num.p.ey[2:end-1, 2:end-1].+maximum(Num.y.c)]
 
+
+    DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
+    LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    # Display residuals
+    err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
+    err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
+    err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
+    @printf("Rx = %2.9e\n", err_x )
+    @printf("Ry = %2.9e\n", err_y )
+    @printf("Rp = %2.9e\n", err_p )
+    # if err_x<ϵ && err_y<ϵ && err_p<ϵ
+    #     @printf("Converged!\n")
+    #     break
+    # end
+
     # p=Plots.spy(Kuuj, c=:RdBu)
     # p=Plots.spy(Kpu, c=:RdBu)
     # p=Plots.spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
-    @show dropzeros!(Kuuj.-Kuuj')
-    @show dropzeros!(Kupj.+Kpuj')
+    # @show dropzeros!(Kuuj.-Kuuj')
+    # @show dropzeros!(Kupj.+Kpuj')
     # display(p)
     # cholesky(Kuu_SC)
+    @show minimum(V.x.v[2:end-1,2:end-1])
+    @show maximum(V.x.v[2:end-1,2:end-1])
+    @show minimum(V.x.c[2:end-1,2:end-1])
+    @show maximum(V.x.c[2:end-1,2:end-1])
+
+    @show minimum(V.y.v[2:end-1,2:end-1])
+    @show maximum(V.y.v[2:end-1,2:end-1])
+    @show minimum(V.y.c[2:end-1,2:end-1])
+    @show maximum(V.y.c[2:end-1,2:end-1])
+
+    @show minimum(P.ex[2:end-1,2:end-1])
+    @show maximum(P.ex[2:end-1,2:end-1])
+    @show minimum(P.ey[2:end-1,2:end-1])
+    @show maximum(P.ey[2:end-1,2:end-1])
+
+    # file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"), "w")
+    # Vx_1 = read(file, "Vx_1") 
+    # Vx_2 = read(file, "Vx_2")
+    # Vy_1 = read(file, "Vy_1") 
+    # Vy_2 = read(file, "Vy_2")
+    # P_1  = read(file, "P_1" ) 
+    # P_2  = read(file, "P_2" )
+    # println("/Users/tduretz/REPO_GIT/FullStagerredGrid/scripts_2D_PT/output_FS.mat")
+    file = matopen("/Users/tduretz/REPO_GIT/FullStagerredGrid/scripts_2D_PT/output_FS.mat")
+    Vx_1 = read(file, "Vx_1") 
+    Vx_2 = read(file, "Vx_2")
+    Vy_1 = read(file, "Vy_1") 
+    Vy_2 = read(file, "Vy_2")
+    P_1  = read(file, "P_1" ) 
+    P_2  = read(file, "P_2" )
+    V.x.v[2:end-1,2:end-1] .= Vx_1
+    V.x.c .= Vx_2
+    V.y.v[2:end-1,2:end-1] .= Vy_1
+    V.y.c .= Vy_2
+    P.ex[2:end-1,2:end-1] .= P_1
+    P.ey[2:end-1,2:end-0] .= P_2
+    close(file)
+
+    DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
+    LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    # Display residuals
+    err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
+    err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
+    err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
+    @printf("Rx = %2.9e\n", err_x )
+    @printf("Ry = %2.9e\n", err_y )
+    @printf("Rp = %2.9e\n", err_p )
         
     # Generate data
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    sol   = ( vx=R.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
     PatchPlotMakie(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
 end
 

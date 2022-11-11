@@ -1,8 +1,9 @@
-# TRY EXPONENTIAL MESH IN BOTH X AND Y
+# To compare results with the 2D DI version
 # Initialisation
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
 using Makie.GeometryBasics, FileIO, ForwardDiff
+using MAT
 include("MeshDeformation.jl")
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
@@ -28,16 +29,16 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     # CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # CairoMakie.Axis(f[2,1], aspect = ar)
-    # min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
-    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    # CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
-
-    # CairoMakie.Axis(f[2,2], aspect = ar)
-    min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
+    min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    CairoMakie.poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+
+    # CairoMakie.Axis(f[2,2], aspect = ar)
+    # min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    # CairoMakie.poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
     
     # CairoMakie.scatter!(x1,y1, color=:white)
     # CairoMakie.scatter!(x2,y2, color=:white, marker=:xcross)
@@ -45,7 +46,7 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
 
     display(f)
     if write_fig==true 
-        FileIO.s∂η∂xve( string(@__DIR__, "/plot.png"), f)
+        FileIO.save( string(@__DIR__, "/plot.png"), f)
     end
     return nothing
 end
@@ -80,11 +81,11 @@ end
     rad      = 0.5
     y0       = -2.
     g        = -1
-    inclusion  = fase
-    adapt_mesh = true
+    inclusion  = false
+    adapt_mesh = false
     solve      = true
     # Numerics
-    ncx, ncy = 40, 40    # numerical grid resolution
+    ncx, ncy = 21, 21    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
     iterMax  = 2e4       # max number of iters
     nout     = 1000      # residual check frequency
@@ -201,8 +202,8 @@ end
     # Viscosity
     η_1  .= 1.0; η_2  .= 1.0
     if inclusion
-        η_1[xc2_1.^2 .+ (yc2_1.-y0).^2 .< rad] .= 100.
-        η_2[xc2_2.^2 .+ (yc2_2.-y0).^2 .< rad] .= 100.
+        # η_1[xc2_1.^2 .+ (yc2_1.-y0).^2 .< rad] .= 100.
+        # η_2[xc2_2.^2 .+ (yc2_2.-y0).^2 .< rad] .= 100.
     end
     # Density
     ρ_1  .= 1.0; ρ_2  .= 1.0
@@ -317,10 +318,34 @@ end
     xc2   = ∂η∂xvWESN(xc2_1, xc2_2[:,1:end-1])[:] 
     yc2   = ∂η∂xvWESN(yc2_1, yc2_2[:,1:end-1])[:]
     PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:], write_fig=false)
+    
+    @show minimum(Vx_1)
+    @show maximum(Vx_1)
+    @show minimum(Vx_2)
+    @show maximum(Vx_2)
+
+    @show minimum(Vy_1)
+    @show maximum(Vy_1)
+    @show minimum(Vy_2)
+    @show maximum(Vy_2)
+
+    @show minimum(P_1)
+    @show maximum(P_1)
+    @show minimum(P_2[:,1:end-1])
+    @show maximum(P_2[:,1:end-1])
+
+    
+    file = matopen(string(@__DIR__,"/output_FS.mat"), "w")
+    write(file, "Vx_1", Vx_1)
+    write(file, "Vx_2", Vx_2)
+    write(file, "Vy_1", Vy_1)
+    write(file, "Vy_2", Vy_2)
+    write(file, "P_1", P_1)
+    write(file, "P_2", P_2)
+    close(file)
+    
     return
 end
 
 Stokes2S_FSG()
-# Stokes2S_FSG()
-# Stokes2S_FSG()
 
