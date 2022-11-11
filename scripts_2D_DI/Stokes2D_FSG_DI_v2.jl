@@ -1,15 +1,7 @@
-using Plots, Printf, LinearAlgebra, SpecialFunctions, CairoMakie, Makie.GeometryBasics
-using ExtendableSparse
+using FullStaggeredGrid
+
+using Printf, ExtendableSparse, LinearAlgebra, MAT
 import SparseArrays:spdiagm
-include("FSG_Rheology.jl")
-include("FSG_Assembly.jl")
-include("FSG_Residual.jl")
-include("FSG_Visu.jl")
-# Macros
-@views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
-@views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
-@views    ∂_∂(fE,fW,fN,fS,Δ,a,b) = a*(fE - fW) / Δ.x .+ b*(fN - fS) / Δ.y
-@views    ∂_∂1(∂f∂ξ,∂f∂η, a,b) = a*∂f∂ξ .+ b*∂f∂η
 @views   avWESN(A,B)  = 0.25.*(A[:,1:end-1] .+ A[:,2:end-0] .+ B[1:end-1,:] .+ B[2:end-0,:])
 
 function Main_2D_DI()
@@ -269,7 +261,7 @@ function Main_2D_DI()
     # P_1  = read(file, "P_1" ) 
     # P_2  = read(file, "P_2" )
     # println("/Users/tduretz/REPO_GIT/FullStagerredGrid/scripts_2D_PT/output_FS.mat")
-    file = matopen("/Users/tduretz/REPO_GIT/FullStagerredGrid/scripts_2D_PT/output_FS.mat")
+    file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"))
     Vx_1 = read(file, "Vx_1") 
     Vx_2 = read(file, "Vx_2")
     Vy_1 = read(file, "Vy_1") 
