@@ -21,6 +21,6 @@ include("FSG_Residual.jl")
 export LinearMomentumResidual!
 
 include("FSG_Visu.jl")
-export PatchPlotMakie
+export PatchPlotMakieBasic
 
 end

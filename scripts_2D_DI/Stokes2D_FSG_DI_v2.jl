@@ -14,7 +14,7 @@ function Main_2D_DI()
     rad        = 0.5
     y0         = -2.0*1.0
     g          = (x = 0., z=-1.0)
-    inclusion  = false
+    inclusion  = true
     adapt_mesh = true
     solve      = true
     comp       = false
@@ -65,7 +65,7 @@ function Main_2D_DI()
                  y   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)),
                  p   = (ex = -1*ones(Int, nc.x+2, nv.y), ey = -1*ones(Int, nv.x,   nc.y+2)) )
     # Fine mesh
-    xxv, yyv    = LinRange(x.min-Δ.x/2, x.max+Δ.x/2, 2nc.x+5), LinRange(y.min-Δ.y/2, y.max+Δ.y/2, 2nc.y+5)
+    xxv, yyv    = LinRange(x.min-Δ.x, x.max+Δ.x, 2nc.x+5), LinRange(y.min-Δ.y, y.max+Δ.y, 2nc.y+5)
     (xv4,yv4) = ([x for x=xxv,y=yyv], [y for x=xxv,y=yyv])
     xv2_1, yv2_1 = xv4[3:2:end-2,3:2:end-2  ], yv4[3:2:end-2,3:2:end-2  ]
     xv2_2, yv2_2 = xv4[2:2:end-1,2:2:end-1  ], yv4[2:2:end-1,1:2:end-1  ]
@@ -116,7 +116,7 @@ function Main_2D_DI()
     if BCVx.North == :Dirichlet 
         BC.x.v[2:end-1,end-1] .= 1
     elseif BCVx.North == :FreeSurface 
-        BC.x.v[2:end-1,end-1] .= 2
+        BC.x.v[3:end-2,end-1] .= 2
     end
     # Vy
     if BCVy.West == :Dirichlet 
@@ -131,7 +131,7 @@ function Main_2D_DI()
     if BCVy.North == :Dirichlet 
         BC.y.v[2:end-1,end-1] .= 1
     elseif BCVy.North == :FreeSurface 
-        BC.y.v[2:end-1,end-1] .= 2
+        BC.y.v[3:end-2,end-1] .= 2
     end
     # Pressure
     if BCVx.North == :FreeSurface || BCVy.North == :FreeSurface 
@@ -260,8 +260,11 @@ function Main_2D_DI()
     # Vy_2 = read(file, "Vy_2")
     # P_1  = read(file, "P_1" ) 
     # P_2  = read(file, "P_2" )
-    # println("/Users/tduretz/REPO_GIT/FullStagerredGrid/scripts_2D_PT/output_FS.mat")
-    file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"))
+    if inclusion
+        file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_inc_rho.mat"))
+    else
+        file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"))
+    end
     Vx_1 = read(file, "Vx_1") 
     Vx_2 = read(file, "Vx_2")
     Vy_1 = read(file, "Vy_1") 
@@ -285,12 +288,18 @@ function Main_2D_DI()
     @printf("Rx = %2.9e\n", err_x )
     @printf("Ry = %2.9e\n", err_y )
     @printf("Rp = %2.9e\n", err_p )
-        
+
+    @printf("%2.2e --- %2.2e\n",  minimum(R.x.v),  maximum(R.x.v))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.x.c),  maximum(R.x.c))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.y.v),  maximum(R.y.v))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
     # Generate data
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    sol   = ( vx=R.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
-    PatchPlotMakie(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
+    sol   = ( vx=R.x.c[2:end-1,2:end-1][:], vy=R.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    PatchPlotMakieBasic(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
 end
 
 Main_2D_DI()

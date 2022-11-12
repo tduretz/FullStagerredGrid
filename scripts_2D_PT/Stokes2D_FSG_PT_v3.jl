@@ -152,7 +152,7 @@ end
     # Density
     ρ_1  .= 1.0; ρ_2  .= 1.0
     # ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
-    # ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0)^2 .< rad] .= 2.
+    # ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 2.
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))
     η_2_sm    = zeros(size(η_2,1), size(η_2,2)-1)

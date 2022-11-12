@@ -1,4 +1,4 @@
-function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax; cmap = :turbo, write_fig=false )
+function PatchPlotMakieBasic(vertx, verty, sol, xmin, xmax, ymin, ymax; cmap = :turbo, write_fig=false )
     f   = CairoMakie.Figure(resolution = (1200, 1000))
 
     ar = (xmax - xmin) / (ymax - ymin)

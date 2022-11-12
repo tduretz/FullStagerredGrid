@@ -208,7 +208,7 @@ end
     ρ_1  .= 1.0; ρ_2  .= 1.0
     if inclusion
         ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
-        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0)^2 .< rad] .= 2.
+        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 2.
     end
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))

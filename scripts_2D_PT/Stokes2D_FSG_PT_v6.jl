@@ -2,7 +2,7 @@
 # Initialisation
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
-using Makie.GeometryBasics, FileIO, ForwardDiff
+using Makie.GeometryBasics, ForwardDiff
 using MAT
 include("MeshDeformation.jl")
 # Macros
@@ -45,9 +45,9 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     CairoMakie.Colorbar(f[1, 2], colormap = cmap, limits=limits, flipaxis = true, size = 25 )
 
     display(f)
-    if write_fig==true 
-        FileIO.save( string(@__DIR__, "/plot.png"), f)
-    end
+    # if write_fig==true 
+    #     FileIO.save( string(@__DIR__, "/plot.png"), f)
+    # end
     return nothing
 end
 @views h(x,A,σ,b,x0)    = A*exp(-(x-x0)^2/σ^2) + b
@@ -81,7 +81,7 @@ end
     rad      = 0.5
     y0       = -2.
     g        = -1
-    inclusion  = false
+    inclusion  = true
     adapt_mesh = false
     solve      = true
     # Numerics
@@ -209,7 +209,7 @@ end
     ρ_1  .= 1.0; ρ_2  .= 1.0
     if inclusion
         ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
-        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0)^2 .< rad] .= 2.
+        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 2.
     end
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))
@@ -257,10 +257,10 @@ end
             dVydx  = (Vy_1[2:end-0,end] - Vy_1[1:end-1,end])/Δx
             P_surf = P_1[:,end]
             # See python notebook v5
-            Vx_2[2:end-1,end] = (3*M1.*P_surf.*dz/2 + M2.*η_surf.*Vx_2[2:end-1,end-1] - M3.*dkdx.*dVxdx.*dz.*η_surf - M4.*dedy.*dkdx.*dVydx.*dz.*η_surf + dedx.*dkdy.*dz.*η_surf.*hx_surf.^2 + 2*dedx.*dkdy.*dz.*η_surf - dedy.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedy.*dkdy.*dz.*η_surf)./(M2.*η_surf)
-            Vy_2[2:end-1,end] = (M2.*η_surf.*Vy_2[2:end-1,end-1] - M5.*dedx.*dkdx.*dVydx.*dz.*η_surf + M5.*dedy.*dkdx.*dVxdx.*dz.*η_surf + 3*M6.*P_surf.*dz/2 - 2*dedx.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedx.*dkdy.*dz.*η_surf.*hx_surf - dedx.*dkdy.*dz.*η_surf - dedy.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedy.*dkdy.*dz.*η_surf)./(M2.*η_surf)
-            # Vx_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vx_2[2:end-1,end-1] - 2.0*M2.*dVydx.*Δy.*η_surf - 2.0*M3.*dVxdx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy.*hx_surf)./(C_surf.*M1x2.*η_surf)  
-            # Vy_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vy_2[2:end-1,end-1] + 2.0*M5.*dVxdx.*Δy.*η_surf - 2.0*M5.*dVydx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy)./(C_surf.*M1x2.*η_surf)  
+            # Vx_2[2:end-1,end] = (3*M1.*P_surf.*dz/2 + M2.*η_surf.*Vx_2[2:end-1,end-1] - M3.*dkdx.*dVxdx.*dz.*η_surf - M4.*dedy.*dkdx.*dVydx.*dz.*η_surf + dedx.*dkdy.*dz.*η_surf.*hx_surf.^2 + 2*dedx.*dkdy.*dz.*η_surf - dedy.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedy.*dkdy.*dz.*η_surf)./(M2.*η_surf)
+            # Vy_2[2:end-1,end] = (M2.*η_surf.*Vy_2[2:end-1,end-1] - M5.*dedx.*dkdx.*dVydx.*dz.*η_surf + M5.*dedy.*dkdx.*dVxdx.*dz.*η_surf + 3*M6.*P_surf.*dz/2 - 2*dedx.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedx.*dkdy.*dz.*η_surf.*hx_surf - dedx.*dkdy.*dz.*η_surf - dedy.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedy.*dkdy.*dz.*η_surf)./(M2.*η_surf)
+            Vx_2[2:end-1,end] = Vx_2[2:end-1,end-1] - Δy*1/1*dVydx # dvxdy = -(dvydx)
+            Vy_2[2:end-1,end] = Vy_2[2:end-1,end-1] + Δy*1/2*dVxdx + 3/4 * Δy*P_surf./η_surf # dvydy = 1/2*dv(dvxdx) + 3/4 * P/eta
             ∇v_1            .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) .+ ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,∂ξ∂yc_1,∂η∂yc_1) 
             ∇v_2[:,1:end-1] .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) .+ ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) 
             ε̇xx_1 .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) .- 1.0/3.0*∇v_1
@@ -335,7 +335,7 @@ end
     @show maximum(P_2[:,1:end-1])
 
     
-    file = matopen(string(@__DIR__,"/output_FS.mat"), "w")
+    file = matopen(string(@__DIR__,"/output_FS_inc_rho.mat"), "w")
     write(file, "Vx_1", Vx_1)
     write(file, "Vx_2", Vx_2)
     write(file, "Vy_1", Vy_1)
