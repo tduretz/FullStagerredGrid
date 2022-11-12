@@ -117,6 +117,7 @@ function Main_2D_DI()
         BC.x.v[2:end-1,end-1] .= 1
     elseif BCVx.North == :FreeSurface 
         BC.x.v[3:end-2,end-1] .= 2
+        BC.x.c[2:end-1,end-1] .= 2
     end
     # Vy
     if BCVy.West == :Dirichlet 
@@ -132,6 +133,7 @@ function Main_2D_DI()
         BC.y.v[2:end-1,end-1] .= 1
     elseif BCVy.North == :FreeSurface 
         BC.y.v[3:end-2,end-1] .= 2
+        BC.y.c[2:end-1,end-1] .= 2
     end
     # Pressure
     if BCVx.North == :FreeSurface || BCVy.North == :FreeSurface 
@@ -209,6 +211,8 @@ function Main_2D_DI()
     f  = [fu; fp]
     δx = K\f
 
+    # @show (Kppj)
+
     V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
     V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
     V.x.c[2:end-1, 2:end-1] .-= δx[Num.x.c[2:end-1, 2:end-1]]
@@ -226,6 +230,10 @@ function Main_2D_DI()
     @printf("Rx = %2.9e\n", err_x )
     @printf("Ry = %2.9e\n", err_y )
     @printf("Rp = %2.9e\n", err_p )
+    
+    
+    display( R.x.v)
+
     # if err_x<ϵ && err_y<ϵ && err_p<ϵ
     #     @printf("Converged!\n")
     #     break
@@ -238,67 +246,64 @@ function Main_2D_DI()
     # @show dropzeros!(Kupj.+Kpuj')
     # display(p)
     # cholesky(Kuu_SC)
-    @show minimum(V.x.v[2:end-1,2:end-1])
-    @show maximum(V.x.v[2:end-1,2:end-1])
-    @show minimum(V.x.c[2:end-1,2:end-1])
-    @show maximum(V.x.c[2:end-1,2:end-1])
+    @show minimum(R.x.v[2:end-1,2:end-1])
+    @show maximum(R.x.v[2:end-1,2:end-1])
+    @show minimum(R.x.c[2:end-1,2:end-1])
+    @show maximum(R.x.c[2:end-1,2:end-1])
 
-    @show minimum(V.y.v[2:end-1,2:end-1])
-    @show maximum(V.y.v[2:end-1,2:end-1])
-    @show minimum(V.y.c[2:end-1,2:end-1])
-    @show maximum(V.y.c[2:end-1,2:end-1])
+    @show minimum(R.y.v[2:end-1,2:end-1])
+    @show maximum(R.y.v[2:end-1,2:end-1])
+    @show minimum(R.y.c[2:end-1,2:end-1])
+    @show maximum(R.y.c[2:end-1,2:end-1])
 
-    @show minimum(P.ex[2:end-1,2:end-1])
-    @show maximum(P.ex[2:end-1,2:end-1])
-    @show minimum(P.ey[2:end-1,2:end-1])
-    @show maximum(P.ey[2:end-1,2:end-1])
+    @show minimum(R.p.ex[2:end-1,2:end-1])
+    @show maximum(R.p.ex[2:end-1,2:end-1])
+    @show minimum(R.p.ey[2:end-1,2:end-1])
+    @show maximum(R.p.ey[2:end-1,2:end-1])
 
-    # file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"), "w")
+    display(BC.x.v)
+    # display(Num.p.ex)
+
+    #########################################
+    # if inclusion
+    #     file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_inc_rho.mat"))
+    # else
+    #     file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"))
+    # end
     # Vx_1 = read(file, "Vx_1") 
     # Vx_2 = read(file, "Vx_2")
     # Vy_1 = read(file, "Vy_1") 
     # Vy_2 = read(file, "Vy_2")
     # P_1  = read(file, "P_1" ) 
     # P_2  = read(file, "P_2" )
-    if inclusion
-        file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_inc_rho.mat"))
-    else
-        file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS.mat"))
-    end
-    Vx_1 = read(file, "Vx_1") 
-    Vx_2 = read(file, "Vx_2")
-    Vy_1 = read(file, "Vy_1") 
-    Vy_2 = read(file, "Vy_2")
-    P_1  = read(file, "P_1" ) 
-    P_2  = read(file, "P_2" )
-    V.x.v[2:end-1,2:end-1] .= Vx_1
-    V.x.c .= Vx_2
-    V.y.v[2:end-1,2:end-1] .= Vy_1
-    V.y.c .= Vy_2
-    P.ex[2:end-1,2:end-1] .= P_1
-    P.ey[2:end-1,2:end-0] .= P_2
-    close(file)
+    # V.x.v[2:end-1,2:end-1] .= Vx_1
+    # V.x.c .= Vx_2
+    # V.y.v[2:end-1,2:end-1] .= Vy_1
+    # V.y.c .= Vy_2
+    # P.ex[2:end-1,2:end-1] .= P_1
+    # P.ey[2:end-1,2:end-0] .= P_2
+    # close(file)
+    # # Residuals
+    # DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
+    # LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    # # Display residuals
+    # err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
+    # err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
+    # err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
+    # @printf("Rx = %2.9e\n", err_x )
+    # @printf("Ry = %2.9e\n", err_y )
+    # @printf("Rp = %2.9e\n", err_p )
 
-    DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
-    LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
-    # Display residuals
-    err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
-    err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
-    err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
-    @printf("Rx = %2.9e\n", err_x )
-    @printf("Ry = %2.9e\n", err_y )
-    @printf("Rp = %2.9e\n", err_p )
-
-    @printf("%2.2e --- %2.2e\n",  minimum(R.x.v),  maximum(R.x.v))
-    @printf("%2.2e --- %2.2e\n",  minimum(R.x.c),  maximum(R.x.c))
-    @printf("%2.2e --- %2.2e\n",  minimum(R.y.v),  maximum(R.y.v))
-    @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
-    @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
-    @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
+    # @printf("%2.2e --- %2.2e\n",  minimum(R.x.v),  maximum(R.x.v))
+    # @printf("%2.2e --- %2.2e\n",  minimum(R.x.c),  maximum(R.x.c))
+    # @printf("%2.2e --- %2.2e\n",  minimum(R.y.v),  maximum(R.y.v))
+    # @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
+    # @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
+    # @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
     # Generate data
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    sol   = ( vx=R.x.c[2:end-1,2:end-1][:], vy=R.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    sol   = ( vx=R.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
     PatchPlotMakieBasic(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
 end
 
