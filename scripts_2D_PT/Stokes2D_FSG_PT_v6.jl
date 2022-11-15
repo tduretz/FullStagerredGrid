@@ -1,10 +1,11 @@
 # To compare results with the 2D DI version
 # Initialisation
+using FullStaggeredGrid
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
 using Makie.GeometryBasics, ForwardDiff
 using MAT
-include("MeshDeformation.jl")
+# include("MeshDeformation.jl")
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
@@ -81,8 +82,8 @@ end
     rad      = 0.5
     y0       = -2.
     g        = -1
-    inclusion  = true
-    adapt_mesh = false
+    inclusion  = false
+    adapt_mesh = true
     solve      = true
     # Numerics
     ncx, ncy = 21, 21    # numerical grid resolution
@@ -175,10 +176,10 @@ end
         params = (Amp=Amp, x0=x0, σ=σ, m=m, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax, σx=σx, σy=σy, ϵ=ϵ)
         ∂x     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
         ∂y     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
-        ComputeForwardTransformation!( ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, xmin, xmax, ymin, ymax, σx, σy, ϵ)
+        ComputeForwardTransformation_ini!( ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, xmin, xmax, ymin, ymax, σx, σy, ϵ)
         # Solve for inverse transformation
         ∂ξ = (∂x=∂ξ∂x, ∂y=∂ξ∂y); ∂η = (∂x=∂η∂x, ∂y=∂η∂y)
-        InverseJacobian!(∂ξ,∂η,∂x,∂y)
+        InverseJacobian_ini!(∂ξ,∂η,∂x,∂y)
         ∂ξ∂x .= ∂ξ.∂x; ∂ξ∂y .= ∂ξ.∂y
         ∂η∂x .= ∂η.∂x; ∂η∂y .= ∂η.∂y
     end
@@ -347,5 +348,97 @@ end
     return
 end
 
+function ComputeForwardTransformation_ini!( ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, xmin, xmax, ymin, ymax, σx, σy, ϵ)
+ 
+    @time for i in eachindex(y_ini)          
+    
+        # compute dxdksi
+        X_msh[1] = x_ini[i]-ϵ
+        X_msh[2] = y_ini[i] 
+        xm       = Mesh_x( X_msh,  Amp, x0, σ, xmax, m, xmin, xmax, σx )
+        # --------
+        X_msh[1] = x_ini[i]+ϵ
+        X_msh[2] = y_ini[i]
+        xp       = Mesh_x( X_msh,  Amp, x0, σ, xmax, m, xmin, xmax, σx )
+        # --------
+        ∂x.∂ξ[i] = (xp - xm) / (2ϵ)
+    
+        # compute dydeta
+        X_msh[1] = x_ini[i]
+        X_msh[2] = y_ini[i]-ϵ
+        xm     = Mesh_x( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+        # --------
+        X_msh[1] = x_ini[i]
+        X_msh[2] = y_ini[i]+ϵ
+        xp       = Mesh_x( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+        # --------
+        ∂x.∂η[i] = (xp - xm) / (2ϵ)
+    
+        # compute dydksi
+        X_msh[1] = x_ini[i]-ϵ
+        X_msh[2] = y_ini[i] 
+        ym       = Mesh_y( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+        # --------
+        X_msh[1] = x_ini[i]+ϵ
+        X_msh[2] = y_ini[i]
+        yp       = Mesh_y( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+        # --------
+        ∂y.∂ξ[i] = (yp - ym) / (2ϵ)
+    
+        # compute dydeta
+        X_msh[1] = x_ini[i]
+        X_msh[2] = y_ini[i]-ϵ
+        ym     = Mesh_y( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+        # --------
+        X_msh[1] = x_ini[i]
+        X_msh[2] = y_ini[i]+ϵ
+        yp     = Mesh_y( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+        # --------
+        ∂y.∂η[i] = (yp - ym) / (2ϵ)
+    end
+    # #################
+    # # ForwardDiff
+    # g = zeros(2)
+    # Y = zeros(1)
+    # dydksi_FD = zeros(size(dydeta))
+    # dydeta_FD = zeros(size(dydeta))
+    # dxdksi_FD = zeros(size(dydeta))
+    # dxdeta_FD = zeros(size(dydeta))
+    # @time for i in eachindex(dydeta_FD)
+    #     X_msh[1] = x_ini[i]
+    #     X_msh[2] = y_ini[i]
+    #     Mesh_y_closed = (X_msh) -> Mesh_y( X_msh, Amp, x0, σ, b, m, ymin )
+    #     ForwardDiff.gradient!( g, Mesh_y_closed, X_msh )
+    #     dydksi_FD[i] = g[1]
+    #     dydeta_FD[i] = g[2]
+    #     Meshx_surf_closed = (X_msh) -> Mesh_x( X_msh, Amp, x0, σ, b, m, ymin )
+    #     ForwardDiff.gradient!( g, Meshx_surf_closed, X_msh )
+    #     dxdksi_FD[i] = g[1]
+    #     dxdeta_FD[i] = g[2]
+    # end
+    
+    # dxdksi_num = diff(xv4,dims=1)/(Δx/2)
+    # dxdeta_num = diff(xv4,dims=2)/(Δy/2)
+    # dydksi_num = diff(yv4,dims=1)/(Δx/2)
+    # dydeta_num = diff(yv4,dims=2)/(Δy/2)
+    
+    # @printf("min(dxdksi    ) = %1.6f --- max(dxdksi    ) = %1.6f\n", minimum(dxdksi   ), maximum(dxdksi   ))
+    # @printf("min(dxdksi_FD ) = %1.6f --- max(dxdksi_FD ) = %1.6f\n", minimum(dxdksi_FD), maximum(dxdksi_FD))
+    # @printf("min(dxdksi_num) = %1.6f --- max(dxdksi_num) = %1.6f\n", minimum(dxdksi_num), maximum(dxdksi_num))
+    
+    # @printf("min(dxdeta    ) = %1.6f --- max(dxdeta   ) = %1.6f\n", minimum(dxdeta   ), maximum(dxdeta   ))
+    # @printf("min(dxdeta_FD ) = %1.6f --- max(dxdeta_FD) = %1.6f\n", minimum(dxdeta_FD), maximum(dxdeta_FD))
+    # @printf("min(dxdeta_num) = %1.6f --- max(dxdeta_num) = %1.6f\n", minimum(dxdeta_num), maximum(dxdeta_num))
+    
+    # @printf("min(dydksi    ) = %1.6f --- max(dydksi    ) = %1.6f\n", minimum(dydksi   ), maximum(dydksi   ))
+    # @printf("min(dydksi_FD ) = %1.6f --- max(dydksi_FD ) = %1.6f\n", minimum(dydksi_FD), maximum(dydksi_FD))
+    # @printf("min(dydksi_num) = %1.6f --- max(dydksi_num) = %1.6f\n", minimum(dydksi_num), maximum(dydksi_num))
+    
+    # @printf("min(dydeta    ) = %1.6f --- max(dydeta    ) = %1.6f\n", minimum(dydeta   ), maximum(dydeta   ))
+    # @printf("min(dydeta_FD ) = %1.6f --- max(dydeta_FD ) = %1.6f\n", minimum(dydeta_FD), maximum(dydeta_FD))
+    # @printf("min(dydeta_num) = %1.6f --- max(dydeta_num) = %1.6f\n", minimum(dydeta_num), maximum(dydeta_num))
+    return nothing
+    end
+    
 Stokes2S_FSG()
 

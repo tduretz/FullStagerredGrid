@@ -7,30 +7,30 @@ import Plots:spy
 @views h(x,A,σ,b,x0)    = A*exp(-(x-x0)^2/σ^2) + b
 @views dhdx(x,A,σ,b,x0) = -2*x/σ^2*A*exp(-(x-x0).^2/σ^2)
 @views y_coord(y,ymin,z0,m)   = (y/ymin)*((z0+m))-z0
-function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy )
+function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy, swiss )
     y0    = ymax0
-    # ymin1 = (sinh.( σy.*(ymin0.-y0) ))
-    # ymax1 = (sinh.( σy.*(ymax0.-y0) ))
-    # sy    = (ymax0-ymin0)/(ymax1-ymin1)
-    # y     = (sinh.( σy.*(X[2].-y0) )) .* sy  .+ y0
-    y     = X[2]
+    if swiss
+        ymin1 = (sinh.( σy.*(ymin0.-y0) ))
+        ymax1 = (sinh.( σy.*(ymax0.-y0) ))
+        sy    = (ymax0-ymin0)/(ymax1-ymin1)
+        y     = (sinh.( σy.*(X[2].-y0) )) .* sy  .+ y0
+    else
+        y     = X[2]
+    end
     z0    = -(A*exp(-(X[1]-x0)^2/σ^2) + b) # topography height
     y     = (y/ymin0)*((z0+m))-z0        # shift grid vertically
-    return y
-
-    # m      = ymin
-    # z0     =    -h.(xv4, 1., 0.5, ymax) # negative to conform with De La Puente paper
-    # hx     = -dhdx.(xv4, 1., 0.5, ymax) # negative to conform with De La Puente paper
-    # A     .= (ymin .- yv4)./(z0.+m) .* hx
-    # C     .= ymin./(z0.+m)
-    # yv4    = (yv4/ymin).*((z0.+m)).-z0   
+    return y   
 end
-function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx )
-    x = X[1]
-    # xmin1 = (sinh.( σx.*(xmin0.-x0) ))
-    # xmax1 = (sinh.( σx.*(xmax0.-x0) ))
-    # sx    = (xmax0-xmin0)/(xmax1-xmin1)
-    # x     = (sinh.( σx.*(X[1].-x0) )) .* sx  .+ x0        
+
+function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx, swiss )
+   if swiss
+        xmin1 = (sinh.( σx.*(xmin0.-x0) ))
+        xmax1 = (sinh.( σx.*(xmax0.-x0) ))
+        sx    = (xmax0-xmin0)/(xmax1-xmin1)
+        x     = (sinh.( σx.*(X[1].-x0) )) .* sx  .+ x0
+    else
+        x = X[1]
+    end
     return x
 end
 
@@ -44,13 +44,14 @@ function Main_2D_DI()
     rad        = 0.5
     y0         = -2.0*1.0
     g          = (x = 0., z=-1.0)
-    inclusion  = true
-    adapt_mesh = false
+    inclusion  = false
+    adapt_mesh = true
+    swiss      = false
     solve      = true
     comp       = false
     PS         = true
     # Numerics
-    nc         = (x=21,     y=21   )  # numerical grid resolution
+    nc         = (x=11,     y=11   )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1) # numerical grid resolution
     solver     = :PH_Cholesky
     ϵ          = 1e-8          # nonlinear tolerance
@@ -130,14 +131,14 @@ function Main_2D_DI()
         for i in eachindex(x_ini)          
             X_msh[1] = x_ini[i]
             X_msh[2] = y_ini[i]     
-            xv4[i]   =  Mesh_x( X_msh,  Amp, x0, σ, y.max, m, x.min, x.max, σx )
-            yv4[i]   =  Mesh_y( X_msh,  Amp, x0, σ, y.max, m, y.min, y.max, σy )
+            xv4[i]   = Mesh_x( X_msh,  Amp, x0, σ, y.max, m, x.min, x.max, σx, swiss )
+            yv4[i]   = Mesh_y( X_msh,  Amp, x0, σ, y.max, m, y.min, y.max, σy, swiss )
         end
         # Compute forward transformation
         params = (Amp=Amp, x0=x0, σ=σ, m=m, xmin=x.min, xmax=x.max, ymin=y.min, ymax=y.max, σx=σx, σy=σy, ϵ=ϵ)
         ∂x     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
         ∂y     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
-        ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, x.min, x.max, y.min, y.max, σx, σy, ϵ)
+        ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, x.min, x.max, y.min, y.max, σx, σy, ϵ, swiss)
         # Solve for inverse transformation
         ∂ξ4 = (∂x=∂ξ∂x, ∂y=∂ξ∂y); ∂η4 = (∂x=∂η∂x, ∂y=∂η∂y)
         InverseJacobian!(∂ξ4,∂η4,∂x,∂y)
@@ -145,10 +146,6 @@ function Main_2D_DI()
         ∂η∂x .= ∂η4.∂x; ∂η∂y .= ∂η4.∂y
     end
     # Grid subsets
-    @show size(xv4)
-    @show size(∂ξ∂x)
-    @show size(∂ξ.∂x.v)
-    @show size(∂ξ∂x[1:2:end-0,1:2:end-0])
     xv2_1, yv2_1 = xv4[3:2:end-2,3:2:end-2  ], yv4[3:2:end-2,3:2:end-2  ]
     xv2_2, yv2_2 = xv4[2:2:end-1,2:2:end-1  ], yv4[2:2:end-1,1:2:end-1  ]
     # xc2_1, yc2_1 = xv4[3:2:end-2,2:2:end-1  ], yv4[3:2:end-2,2:2:end-1  ]
@@ -232,85 +229,154 @@ function Main_2D_DI()
     # Free surface coefficients
     UpdateFreeSurfaceCoefficients!( BC, D, ∂ξ, ∂η )
 
-    DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
-    LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
-    # Display residuals
-    err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
-    err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
-    err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
-    @printf("Rx = %2.9e\n", err_x )
-    @printf("Ry = %2.9e\n", err_y )
-    @printf("Rp = %2.9e\n", err_p )
-    # if err_x<ϵ && err_y<ϵ && err_p<ϵ
-    #     @printf("Converged!\n")
-    #     break
+    # DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
+    # LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    # # Display residuals
+    # err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
+    # err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
+    # err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
+    # @printf("Rx = %2.9e\n", err_x )
+    # @printf("Ry = %2.9e\n", err_y )
+    # @printf("Rp = %2.9e\n", err_p )
+    # # if err_x<ϵ && err_y<ϵ && err_p<ϵ
+    # #     @printf("Converged!\n")
+    # #     break
+    # # end
+    # # Numbering
+    # Num      = ( x   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
+    #              y   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
+    #              p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2, nc.y+2)) )
+
+    # Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
+    # Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
+    # Num.x.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.y.v)
+    # Num.y.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.x.c)
+    # Num.p.ex[2:end-1,2:end-1] .= reshape(1:((nc.x)*(nv.y)), nc.x, nv.y) 
+    # Num.p.ey[2:end-1,2:end-1] .= reshape(1:((nv.x)*(nc.y)), nv.x, nc.y) .+ maximum(Num.p.ex)
+    # # Initial sparse
+    # println("Initial Assembly")
+    # ndofV = maximum(Num.y.c)
+    # ndofP = maximum(Num.p.ey)
+    # Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
+    # Kup   = ExtendableSparseMatrix(ndofV, ndofP)
+    # Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
+    # Kpp   = ExtendableSparseMatrix(ndofP, ndofP)
+    # @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+
+    # Kuuj = Kuu.cscmatrix
+    # Kupj = Kup.cscmatrix
+    # Kpuj = Kpu.cscmatrix
+    # Kppj = Kpp.cscmatrix
+
+    # nV   = maximum(Num.y.c)
+    # nP   = maximum(Num.p.ey)
+    # fu   = zeros(nV)
+    # fp   = zeros(nP)
+    # fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
+    # fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
+    # fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
+    # fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
+    # fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
+    # fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
+
+    # Kpp = spdiagm( zeros(nP) )
+
+    # # Decoupled solve
+    # if comp==false 
+    #     npdof = maximum(Num.p.ey)
+    #     coef  = zeros(npdof)
+    #     for i in eachindex(coef)
+    #         coef[i] = penalty#.*mesh.ke./mesh.Ω
+    #     end
+    #     Kppi  = spdiagm(coef)
+    # else
+    #     Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
     # end
-    # Numbering
-    Num      = ( x   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
-                 y   = (v  = -1*ones(Int, nv.x+2, nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2)),
-                 p   = (ex = -1*ones(Int, nc.x+2, nv.y+2), ey = -1*ones(Int, nv.x+2, nc.y+2)) )
+    # Kuu_SC = Kuuj .- Kupj*(Kppi*Kpuj)
 
-    Num.x.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y)
-    Num.y.v[ 2:end-1,2:end-1] .= reshape(1:((nv.x)*(nv.y)), nv.x, nv.y) .+ maximum(Num.x.v)
-    Num.x.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.y.v)
-    Num.y.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.x.c)
-    Num.p.ex[2:end-1,2:end-1] .= reshape(1:((nc.x)*(nv.y)), nc.x, nv.y) 
-    Num.p.ey[2:end-1,2:end-1] .= reshape(1:((nv.x)*(nc.y)), nv.x, nc.y) .+ maximum(Num.p.ex)
-    # Initial sparse
-    println("Initial Assembly")
-    ndofV = maximum(Num.y.c)
-    ndofP = maximum(Num.p.ey)
-    Kuu   = ExtendableSparseMatrix(ndofV, ndofV)
-    Kup   = ExtendableSparseMatrix(ndofV, ndofP)
-    Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
-    Kpp   = ExtendableSparseMatrix(ndofP, ndofP)
-    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+    # #################
+    # K  = [Kuuj Kupj; Kpuj Kppj]
+    # f  = [fu; fp]
+    # δx = K\f
 
-    Kuuj = Kuu.cscmatrix
-    Kupj = Kup.cscmatrix
-    Kpuj = Kpu.cscmatrix
-    Kppj = Kpp.cscmatrix
+    # # @show (Kppj)
 
-    nV   = maximum(Num.y.c)
-    nP   = maximum(Num.p.ey)
-    fu   = zeros(nV)
-    fp   = zeros(nP)
-    fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
-    fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
-    fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
-    fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
-    fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
-    fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
+    # V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
+    # V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
+    # V.x.c[2:end-1, 2:end-1] .-= δx[Num.x.c[2:end-1, 2:end-1]]
+    # V.y.c[2:end-1, 2:end-1] .-= δx[Num.y.c[2:end-1, 2:end-1]]
+    # P.ex[2:end-1, 2:end-1]  .-= δx[Num.p.ex[2:end-1, 2:end-1].+maximum(Num.y.c)]
+    # P.ey[2:end-1, 2:end-1]  .-= δx[Num.p.ey[2:end-1, 2:end-1].+maximum(Num.y.c)]
 
-    Kpp = spdiagm( zeros(nP) )
 
-    # Decoupled solve
-    if comp==false 
-        npdof = maximum(Num.p.ey)
-        coef  = zeros(npdof)
-        for i in eachindex(coef)
-            coef[i] = penalty#.*mesh.ke./mesh.Ω
-        end
-        Kppi  = spdiagm(coef)
+    # DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
+    # LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    # # Display residuals
+    # err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
+    # err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
+    # err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
+    # @printf("Rx = %2.9e\n", err_x )
+    # @printf("Ry = %2.9e\n", err_y )
+    # @printf("Rp = %2.9e\n", err_p )
+    
+    
+    # # display( R.x.v)
+
+    # # if err_x<ϵ && err_y<ϵ && err_p<ϵ
+    # #     @printf("Converged!\n")
+    # #     break
+    # # end
+
+    # # p=spy(Kuu_SC, c=:RdBu)
+    # # p=spy(Kuuj, c=:RdBu)
+    # # p=spy(Kpu, c=:RdBu)
+    # # p=spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
+    # # @show dropzeros!(Kuuj.-Kuuj')
+    # # @show dropzeros!(Kupj.+Kpuj')
+    # # display(p)
+    # # cholesky(Kuu_SC)
+    # @show minimum(R.x.v[2:end-1,2:end-1])
+    # @show maximum(R.x.v[2:end-1,2:end-1])
+    # @show minimum(R.x.c[2:end-1,2:end-1])
+    # @show maximum(R.x.c[2:end-1,2:end-1])
+
+    # @show minimum(R.y.v[2:end-1,2:end-1])
+    # @show maximum(R.y.v[2:end-1,2:end-1])
+    # @show minimum(R.y.c[2:end-1,2:end-1])
+    # @show maximum(R.y.c[2:end-1,2:end-1])
+
+    # @show minimum(R.p.ex[2:end-1,2:end-1])
+    # @show maximum(R.p.ex[2:end-1,2:end-1])
+    # @show minimum(R.p.ey[2:end-1,2:end-1])
+    # @show maximum(R.p.ey[2:end-1,2:end-1])
+
+    # # Generate data
+    # vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
+    # verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
+    # sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    # PatchPlotMakieBasic(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
+ 
+    ####################
+    if swiss
+        file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_topo_swiss.mat"))
     else
-        Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
+        file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_topo.mat"))
     end
-    Kuu_SC = Kuuj .- Kupj*(Kppi*Kpuj)
+    Vx_1 = read(file, "Vx_1") 
+    Vx_2 = read(file, "Vx_2")
+    Vy_1 = read(file, "Vy_1") 
+    Vy_2 = read(file, "Vy_2")
+    P_1  = read(file, "P_1" ) 
+    P_2  = read(file, "P_2" )
 
-    #################
-    K  = [Kuuj Kupj; Kpuj Kppj]
-    f  = [fu; fp]
-    δx = K\f
+    close(file)
 
-    # @show (Kppj)
-
-    V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
-    V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
-    V.x.c[2:end-1, 2:end-1] .-= δx[Num.x.c[2:end-1, 2:end-1]]
-    V.y.c[2:end-1, 2:end-1] .-= δx[Num.y.c[2:end-1, 2:end-1]]
-    P.ex[2:end-1, 2:end-1]  .-= δx[Num.p.ex[2:end-1, 2:end-1].+maximum(Num.y.c)]
-    P.ey[2:end-1, 2:end-1]  .-= δx[Num.p.ey[2:end-1, 2:end-1].+maximum(Num.y.c)]
-
+    V.x.v[2:end-1,2:end-1] .= Vx_1
+    V.x.c .= Vx_2
+    V.y.v[2:end-1,2:end-1] .= Vy_1
+    V.y.c .= Vy_2
+    P.ex[2:end-1,2:end-1] .= P_1
+    P.ey[2:end-1,2:end-0] .= P_2
 
     DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
     LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
@@ -321,43 +387,17 @@ function Main_2D_DI()
     @printf("Rx = %2.9e\n", err_x )
     @printf("Ry = %2.9e\n", err_y )
     @printf("Rp = %2.9e\n", err_p )
-    
-    
-    # display( R.x.v)
 
-    # if err_x<ϵ && err_y<ϵ && err_p<ϵ
-    #     @printf("Converged!\n")
-    #     break
-    # end
+    @printf("%2.2e --- %2.2e\n",  minimum(R.x.v),  maximum(R.x.v))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.x.c),  maximum(R.x.c))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.y.v),  maximum(R.y.v))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
+    @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
 
-    # p=spy(Kuu_SC, c=:RdBu)
-    # p=spy(Kuuj, c=:RdBu)
-    # p=spy(Kpu, c=:RdBu)
-    # p=spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
-    # @show dropzeros!(Kuuj.-Kuuj')
-    # @show dropzeros!(Kupj.+Kpuj')
-    # display(p)
-    # cholesky(Kuu_SC)
-    @show minimum(R.x.v[2:end-1,2:end-1])
-    @show maximum(R.x.v[2:end-1,2:end-1])
-    @show minimum(R.x.c[2:end-1,2:end-1])
-    @show maximum(R.x.c[2:end-1,2:end-1])
+    display(R.p.ex)
 
-    @show minimum(R.y.v[2:end-1,2:end-1])
-    @show maximum(R.y.v[2:end-1,2:end-1])
-    @show minimum(R.y.c[2:end-1,2:end-1])
-    @show maximum(R.y.c[2:end-1,2:end-1])
-
-    @show minimum(R.p.ex[2:end-1,2:end-1])
-    @show maximum(R.p.ex[2:end-1,2:end-1])
-    @show minimum(R.p.ey[2:end-1,2:end-1])
-    @show maximum(R.p.ey[2:end-1,2:end-1])
-
-    # Generate data
-    vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
-    verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
-    PatchPlotMakieBasic(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
+    display(BC.p.ex)
 end
 
 Main_2D_DI()

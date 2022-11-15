@@ -1,9 +1,9 @@
 # TRY EXPONENTIAL MESH IN BOTH X AND Y
 # Initialisation
+using FullStaggeredGrid
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
-using Makie.GeometryBasics, FileIO, ForwardDiff
-include("MeshDeformation.jl")
+using Makie.GeometryBasics, FileIO, ForwardDiff, MAT
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
@@ -52,22 +52,29 @@ end
 @views h(x,A,σ,b,x0)    = A*exp(-(x-x0)^2/σ^2) + b
 @views dhdx(x,A,σ,b,x0) = -2*x/σ^2*A*exp(-(x-x0).^2/σ^2)
 @views y_coord(y,ymin,z0,m)   = (y/ymin)*((z0+m))-z0
-function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy )
-    y0    = ymax0
-    ymin1 = (sinh.( σy.*(ymin0.-y0) ))
-    ymax1 = (sinh.( σy.*(ymax0.-y0) ))
-    sy    = (ymax0-ymin0)/(ymax1-ymin1)
-    y     = (sinh.( σy.*(X[2].-y0) )) .* sy  .+ y0
+function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy, swiss )
+    if swiss
+        y0    = ymax0 
+        ymin1 = (sinh.( σy.*(ymin0.-y0) ))
+        ymax1 = (sinh.( σy.*(ymax0.-y0) ))
+        sy    = (ymax0-ymin0)/(ymax1-ymin1)
+        y     = (sinh.( σy.*(X[2].-y0) )) .* sy  .+ y0
+    else
+        y     = X[2]
+    end
     z0    = -(A*exp(-(X[1]-x0)^2/σ^2) + b) # topography height
     y     = (y/ymin0)*((z0+m))-z0        # shift grid vertically
     return y
 end
-function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx )
-    xmin1 = (sinh.( σx.*(xmin0.-x0) ))
-    xmax1 = (sinh.( σx.*(xmax0.-x0) ))
-    sx    = (xmax0-xmin0)/(xmax1-xmin1)
-    x     = (sinh.( σx.*(X[1].-x0) )) .* sx  .+ x0        
-    # x   = X[1]
+function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx, swiss )
+    if swiss
+        xmin1 = (sinh.( σx.*(xmin0.-x0) ))
+        xmax1 = (sinh.( σx.*(xmax0.-x0) ))
+        sx    = (xmax0-xmin0)/(xmax1-xmin1)
+        x     = (sinh.( σx.*(X[1].-x0) )) .* sx  .+ x0  
+    else
+        x   = X[1]  
+    end    
     return x
 end
 
@@ -80,18 +87,19 @@ end
     rad      = 0.5
     y0       = -2.
     g        = -1
-    inclusion  = fase
+    inclusion  = false
     adapt_mesh = true
+    swiss      = true
     solve      = true
     # Numerics
-    ncx, ncy = 40, 40    # numerical grid resolution
+    ncx, ncy = 11, 11    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
-    iterMax  = 2e4       # max number of iters
+    iterMax  = 3e4       # max number of iters
     nout     = 1000      # residual check frequency
     # Iterative parameters -------------------------------------------
     if adapt_mesh
-        Reopt    = 0.5*π
-        cfl      = 2.0
+        Reopt    = 0.5*π*1.75
+        cfl      = 1.1/2.0
         nsm      = 4
     else
         Reopt    = 0.625*π*2
@@ -167,14 +175,14 @@ end
         for i in eachindex(x_ini)          
             X_msh[1] = x_ini[i]
             X_msh[2] = y_ini[i]     
-            xv4[i]   =  Mesh_x( X_msh,  Amp, x0, σ, ymax, m, xmin, xmax, σx )
-            yv4[i]   =  Mesh_y( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy )
+            xv4[i]   =  Mesh_x( X_msh,  Amp, x0, σ, ymax, m, xmin, xmax, σx, swiss )
+            yv4[i]   =  Mesh_y( X_msh,  Amp, x0, σ, ymax, m, ymin, ymax, σy, swiss )
         end
         # Compute forward transformation
-        params = (Amp=Amp, x0=x0, σ=σ, m=m, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax, σx=σx, σy=σy, ϵ=ϵ)
+        params = (Amp=Amp, x0=x0, σ=σ, m=m, xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax, σx=σx, σy=σy, ϵ=ϵ, swiss=swiss)
         ∂x     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
         ∂y     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
-        ComputeForwardTransformation!( ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, xmin, xmax, ymin, ymax, σx, σy, ϵ)
+        ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, xmin, xmax, ymin, ymax, σx, σy, ϵ, swiss)
         # Solve for inverse transformation
         ∂ξ = (∂x=∂ξ∂x, ∂y=∂ξ∂y); ∂η = (∂x=∂η∂x, ∂y=∂η∂y)
         InverseJacobian!(∂ξ,∂η,∂x,∂y)
@@ -241,13 +249,14 @@ end
         dkdy    = ∂ξ∂y[3:2:end-2, end]
         dedx    = ∂η∂x[3:2:end-2, end]
         dedy    = ∂η∂y[3:2:end-2, end]
-
-        M1 = dedx.*hx_surf.^2 .- dedx .+ 2*dedy.*hx_surf
-        M2 = 2*dedx.^2 .*hx_surf.^2 .+ dedx.^2 .+ 2*dedx.*dedy.*hx_surf .+ dedy.^2 .*hx_surf.^2 .+ 2*dedy.^2
-        M3 = 2*dedx.*hx_surf.^2 .+ dedx .+ 2*dedy.*hx_surf
-        M4 = hx_surf.^2 .+ 2
-        M5 = 2*hx_surf.^2 .+ 1
-        M6 = 2*dedx.*hx_surf - dedy.*hx_surf.^2 .+ dedy
+        h_x = hx[3:2:end-2, end]
+        eta = η_surf
+        duNddudx = dz .* (-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedy .* dkdx .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        duNddvdx = dz .* (dedx .* dkdy .* h_x .^ 2 .+ 2 * dedx .* dkdy .- dedy .* dkdx .* h_x .^ 2 .- 2 * dedy .* dkdx) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        duNdP    = (3 // 2) .* dz .* (dedx .* h_x .^ 2 .- dedx .+ 2 .* dedy .* h_x) ./ (eta .* (2 .* dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 .* dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 .* dedy .^ 2))
+        dvNddudx = dz .* (.-2 * dedx .* dkdy .* h_x .^ 2 .- dedx .* dkdy .+ 2 * dedy .* dkdx .* h_x .^ 2 .+ dedy .* dkdx) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        dvNddvdx = dz .* (.-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedx .* dkdy .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        dvNdP    = (3 // 2) .* dz .* (2 * dedx .* h_x .- dedy .* h_x .^ 2 .+ dedy) ./ (eta .* (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2))
         # PT loop
         it=1; iter=1; err=2*ε; err_evo1=[]; err_evo2=[];
         while (err>ε && iter<=iterMax)
@@ -256,10 +265,8 @@ end
             dVydx  = (Vy_1[2:end-0,end] - Vy_1[1:end-1,end])/Δx
             P_surf = P_1[:,end]
             # See python notebook v5
-            Vx_2[2:end-1,end] = (3*M1.*P_surf.*dz/2 + M2.*η_surf.*Vx_2[2:end-1,end-1] - M3.*dkdx.*dVxdx.*dz.*η_surf - M4.*dedy.*dkdx.*dVydx.*dz.*η_surf + dedx.*dkdy.*dz.*η_surf.*hx_surf.^2 + 2*dedx.*dkdy.*dz.*η_surf - dedy.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedy.*dkdy.*dz.*η_surf)./(M2.*η_surf)
-            Vy_2[2:end-1,end] = (M2.*η_surf.*Vy_2[2:end-1,end-1] - M5.*dedx.*dkdx.*dVydx.*dz.*η_surf + M5.*dedy.*dkdx.*dVxdx.*dz.*η_surf + 3*M6.*P_surf.*dz/2 - 2*dedx.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedx.*dkdy.*dz.*η_surf.*hx_surf - dedx.*dkdy.*dz.*η_surf - dedy.*dkdy.*dz.*η_surf.*hx_surf.^2 - 2*dedy.*dkdy.*dz.*η_surf)./(M2.*η_surf)
-            # Vx_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vx_2[2:end-1,end-1] - 2.0*M2.*dVydx.*Δy.*η_surf - 2.0*M3.*dVxdx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy.*hx_surf)./(C_surf.*M1x2.*η_surf)  
-            # Vy_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vy_2[2:end-1,end-1] + 2.0*M5.*dVxdx.*Δy.*η_surf - 2.0*M5.*dVydx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy)./(C_surf.*M1x2.*η_surf)  
+            Vx_2[2:end-1,end] = Vx_2[2:end-1,end-1] .+ duNddudx.*dVxdx .+ duNddvdx.*dVydx .+ duNdP.*P_surf
+            Vy_2[2:end-1,end] = Vy_2[2:end-1,end-1] .+ dvNddudx.*dVxdx .+ dvNddvdx.*dVydx .+ dvNdP.*P_surf
             ∇v_1            .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) .+ ∂_∂y(Vy_2[2:end-1,:],Vy_1,Δx,Δy,∂ξ∂yc_1,∂η∂yc_1) 
             ∇v_2[:,1:end-1] .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) .+ ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) 
             ε̇xx_1 .=  ∂_∂x(Vx_1,Vx_2[2:end-1,:],Δx,Δy,∂ξ∂xc_1,∂η∂xc_1) .- 1.0/3.0*∇v_1
@@ -317,6 +324,16 @@ end
     xc2   = ∂η∂xvWESN(xc2_1, xc2_2[:,1:end-1])[:] 
     yc2   = ∂η∂xvWESN(yc2_1, yc2_2[:,1:end-1])[:]
     PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:], write_fig=false)
+    
+    file = matopen(string(@__DIR__,"/output_FS_topo_swiss.mat"), "w")
+    write(file, "Vx_1", Vx_1)
+    write(file, "Vx_2", Vx_2)
+    write(file, "Vy_1", Vy_1)
+    write(file, "Vy_2", Vy_2)
+    write(file, "P_1", P_1)
+    write(file, "P_2", P_2)
+    close(file)
+
     return
 end
 

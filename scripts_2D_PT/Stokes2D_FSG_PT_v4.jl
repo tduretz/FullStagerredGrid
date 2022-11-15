@@ -60,7 +60,9 @@ end
     y0       = -2.
     g        = -1
     adapt_mesh = true
-    solve      = false
+    inclusion  = false
+    swiss      = false
+    solve      = true
     # Numerics
     ncx, ncy = 51, 51    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
@@ -142,7 +144,9 @@ end
         xmin1    = (sinh.( σx.*(xmin0.-x0) ))
         xmax1    = (sinh.( σx.*(xmax0.-x0) ))
         sx       = (xmax0-xmin0)/(xmax1-xmin1)
-        xv4      = (sinh.( σx.*(xv4.-x0) )) .* sx  .+ x0
+        if swiss
+            xv4      = (sinh.( σx.*(xv4.-x0) )) .* sx  .+ x0
+        end
         @printf("Check width = %2.2e\n", (maximum(xv4)-minimum(xv4)) - (xmax0-xmin0))
         
         y0       = ymax
@@ -153,7 +157,9 @@ end
         ymin1    = (sinh.( σy.*(ymin0.-y0) ))
         ymax1    = (sinh.( σy.*(ymax0.-y0) ))
         sy       = (ymax0-ymin0)/(ymax1-ymin1)
-        yv4      = (sinh.( σy.*(yv4.-y0) )) .* sy  .+ y0
+        if swiss
+            yv4      = (sinh.( σy.*(yv4.-y0) )) .* sy  .+ y0
+        end
         @printf("Check height = %2.2e\n", (maximum(yv4)-minimum(yv4)) - (ymax0-ymin0))
         
         # then evaluate topo = f(x)
@@ -176,12 +182,16 @@ end
     Vy_1 .=  εbg.*yv2_1; Vy_2 .=  εbg.*yv2_2
     # Viscosity
     η_1  .= 1.0; η_2  .= 1.0
-    η_1[xc2_1.^2 .+ (yc2_1.-y0).^2 .< rad] .= 100.
-    η_2[xc2_2.^2 .+ (yc2_2.-y0).^2 .< rad] .= 100.
+    if inclusion 
+        η_1[xc2_1.^2 .+ (yc2_1.-y0).^2 .< rad] .= 100.
+        η_2[xc2_2.^2 .+ (yc2_2.-y0).^2 .< rad] .= 100.
+    end
     # Density
     ρ_1  .= 1.0; ρ_2  .= 1.0
-    ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
-    ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 2.
+    if inclusion 
+        ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
+        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 2.
+    end
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))
     η_2_sm    = zeros(size(η_2,1), size(η_2,2)-1)
@@ -210,6 +220,19 @@ end
         M3   =  0.5*hx_surf.^2 .+ 0.75
         M4   =      hx_surf.^2 .+ 1
         M5   =  0.5*hx_surf.^2 .+ 0.25
+        dz   = Δy
+        dkdx = 1.0
+        dkdy = A[3:2:end-2, end]
+        dedx = 0.0
+        dedy = C[3:2:end-2, end]
+        h_x = hx[3:2:end-2, end]
+        eta = η_surf
+        duNddudx = dz .* (-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedy .* dkdx .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        duNddvdx = dz .* (dedx .* dkdy .* h_x .^ 2 .+ 2 * dedx .* dkdy .- dedy .* dkdx .* h_x .^ 2 .- 2 * dedy .* dkdx) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        duNdP    = (3 // 2) .* dz .* (dedx .* h_x .^ 2 .- dedx .+ 2 .* dedy .* h_x) ./ (eta .* (2 .* dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 .* dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 .* dedy .^ 2))
+        dvNddudx = dz .* (.-2 * dedx .* dkdy .* h_x .^ 2 .- dedx .* dkdy .+ 2 * dedy .* dkdx .* h_x .^ 2 .+ dedy .* dkdx) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        dvNddvdx = dz .* (.-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedx .* dkdy .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
+        dvNdP    = (3 // 2) .* dz .* (2 * dedx .* h_x .- dedy .* h_x .^ 2 .+ dedy) ./ (eta .* (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2))
         # PT loop
         it=1; iter=1; err=2*ε; err_evo1=[]; err_evo2=[];
         while (err>ε && iter<=iterMax)
@@ -218,9 +241,12 @@ end
             dVydx  = (Vy_1[2:end-0,end] - Vy_1[1:end-1,end])/Δx
             P_surf = P_1[:,end]
 
+            # See python notebook v5
+            Vx_2[2:end-1,end] = Vx_2[2:end-1,end-1] .+ duNddudx.*dVxdx .+ duNddvdx.*dVydx .+ duNdP.*P_surf
+            Vy_2[2:end-1,end] = Vy_2[2:end-1,end-1] .+ dvNddudx.*dVxdx .+ dvNddvdx.*dVydx .+ dvNdP.*P_surf
             # See python notebook v4
-            Vx_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vx_2[2:end-1,end-1] - 2.0*M2.*dVydx.*Δy.*η_surf - 2.0*M3.*dVxdx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy.*hx_surf)./(C_surf.*M1x2.*η_surf)  
-            Vy_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vy_2[2:end-1,end-1] + 2.0*M5.*dVxdx.*Δy.*η_surf - 2.0*M5.*dVydx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy)./(C_surf.*M1x2.*η_surf)  
+            # Vx_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vx_2[2:end-1,end-1] - 2.0*M2.*dVydx.*Δy.*η_surf - 2.0*M3.*dVxdx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy.*hx_surf)./(C_surf.*M1x2.*η_surf)  
+            # Vy_2[2:end-1,end] = (2.0*C_surf.*M1.*η_surf.*Vy_2[2:end-1,end-1] + 2.0*M5.*dVxdx.*Δy.*η_surf - 2.0*M5.*dVydx.*Δy.*η_surf.*hx_surf + 0.75*M4.*P_surf.*Δy)./(C_surf.*M1x2.*η_surf)  
             # See python notebook v3
             # Vx_2[2:end-1,end] = Vx_2[2:end-1,end-1] - Δy*1/1*dVydx # dvxdy = -(dvydx)
             # Vy_2[2:end-1,end] = Vy_2[2:end-1,end-1] + Δy*1/2*dVxdx + 3/4 * Δy*P_surf./η_surf # dvydy = 1/2*dv(dvxdx) + 3/4 * P/eta
