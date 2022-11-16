@@ -241,14 +241,14 @@ end
     κΔτp_1 .= cfl .* η_1 .* Δx ./ (xmax-xmin)
     κΔτp_2 .= cfl .* η_2[:,1:end-1] .* Δx ./ (xmax-xmin)
     if solve
-        hx_surf =   hx[3:2:end-2, end]
+        hx_surf =   hx[3:2:end-2, end-1]
         η_surf  = η_1[:,end]
         dx      = Δx
         dz      = Δy
-        dkdx    = ∂ξ∂x[3:2:end-2, end]
-        dkdy    = ∂ξ∂y[3:2:end-2, end]
-        dedx    = ∂η∂x[3:2:end-2, end]
-        dedy    = ∂η∂y[3:2:end-2, end]
+        dkdx    = ∂ξ∂x[3:2:end-2, end-1]
+        dkdy    = ∂ξ∂y[3:2:end-2, end-1]
+        dedx    = ∂η∂x[3:2:end-2, end-1]
+        dedy    = ∂η∂y[3:2:end-2, end-1]
         h_x = hx[3:2:end-2, end]
         eta = η_surf
         duNddudx = dz .* (-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedy .* dkdx .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)
@@ -338,12 +338,12 @@ end
     write(file, "duNdP"   ,duNdP   )   
     write(file, "dvNddudx",dvNddudx)
     write(file, "dvNddvdx",dvNddvdx)
-    write(file, "dvNdP"   ,dvNdP   ) 
-    write(file, "dkdx", dkdx)
-    write(file, "dkdy", dkdy)
-    write(file, "dedx", dedx)
-    write(file, "dedy", dedy)
-    write(file, "hx", h_x) 
+    write(file, "dvNdP"   ,dvNdP   )    
+    write(file, "dkdx", Array(dkdx))
+    write(file, "dkdy", Array(dkdy))
+    write(file, "dedx", Array(dedx))
+    write(file, "dedy", Array(dedy))
+    write(file, "hx",   Array(h_x) )
     close(file)
 
     return
