@@ -126,7 +126,7 @@ function Main_2D_DI()
         y_ini  = copy(yv4)
         X_msh  = zeros(2)
         # Compute slope
-        hx     = -dhdx.(x_ini, Amp, σ, y.max, x0)
+        hx .= -dhdx.(x_ini, Amp, σ, y.max, x0)
         # Deform mesh
         for i in eachindex(x_ini)          
             X_msh[1] = x_ini[i]
@@ -158,7 +158,8 @@ function Main_2D_DI()
     ∂η.∂x.ey .= ∂η∂x[1:2:end-0,2:2:end-1]; ∂η.∂x.c .= ∂η∂x[2:2:end-1,2:2:end-1]
     ∂η.∂y.ex .= ∂η∂y[2:2:end-1,1:2:end-0]; ∂η.∂y.v .= ∂η∂y[1:2:end-0,1:2:end-0]
     ∂η.∂y.ey .= ∂η∂y[1:2:end-0,2:2:end-1]; ∂η.∂y.c .= ∂η∂y[2:2:end-1,2:2:end-1]
-
+    display(size(hx[2:2:end-1,end-1]))
+    BC.∂h∂x  .=   hx[2:2:end-1,end-1]
     # Velocity
     V.x.v .= -PS*ε̇bg.*x.v .+ (1-PS)*ε̇bg.*y.v; V.x.c .= -PS*ε̇bg.*x.c .+ (1-PS)*ε̇bg.*y.c
     V.y.v .=  PS*ε̇bg.*y.v;                    V.y.c .=  PS*ε̇bg.*y.c
@@ -368,6 +369,12 @@ function Main_2D_DI()
     Vy_2 = read(file, "Vy_2")
     P_1  = read(file, "P_1" ) 
     P_2  = read(file, "P_2" )
+    duNddudx = read(file, "duNddudx")
+    duNddvdx = read(file, "duNddvdx")
+    duNdP    = read(file, "duNdP"   )   
+    dvNddudx = read(file, "dvNddudx")
+    dvNddvdx = read(file, "dvNddvdx")
+    dvNdP    = read(file, "dvNdP"   )  
 
     close(file)
 
@@ -377,6 +384,12 @@ function Main_2D_DI()
     V.y.c .= Vy_2
     P.ex[2:end-1,2:end-1] .= P_1
     P.ey[2:end-1,2:end-0] .= P_2
+    # BC.C0[2:end-1] .= duNdP./Δ.y
+    # BC.C1[2:end-1] .= duNddudx./Δ.y
+    # BC.C2[2:end-1] .= duNddvdx./Δ.y
+    # BC.D0[2:end-1] .= dvNdP./Δ.y
+    # BC.D1[2:end-1] .= dvNddudx./Δ.y
+    # BC.D2[2:end-1] .= dvNddvdx./Δ.y
 
     DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
     LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
@@ -395,9 +408,25 @@ function Main_2D_DI()
     @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
     @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
 
-    display(R.p.ex)
+    # display(R.p.ex)
 
-    display(BC.p.ex)
+    # display(BC.p.ex)
+    display(BC.C0[2:end-1])
+    display(duNdP./Δ.y)
+
+    display(BC.C0[2:end-1].-duNdP./Δ.y)
+    # display(BC.C1[2:end-1].-duNddudx./Δ.y)
+    # display(BC.C2[2:end-1].-duNddvdx./Δ.y)
+
+    # display(BC.D0[2:end-1].-dvNdP./Δ.y)
+    # display(BC.D1[2:end-1].-dvNddudx./Δ.y)
+    # display(BC.D2[2:end-1].-dvNddvdx./Δ.y)
+
+    # display(BC.C1)
+    # display(BC.C2)
+    # display(BC.D0)
+    # display(BC.D1)
+    # display(BC.D2)
 end
 
 Main_2D_DI()

@@ -89,7 +89,7 @@ end
     g        = -1
     inclusion  = false
     adapt_mesh = true
-    swiss      = true
+    swiss      = false
     solve      = true
     # Numerics
     ncx, ncy = 11, 11    # numerical grid resolution
@@ -325,13 +325,25 @@ end
     yc2   = ∂η∂xvWESN(yc2_1, yc2_2[:,1:end-1])[:]
     PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:], write_fig=false)
     
-    file = matopen(string(@__DIR__,"/output_FS_topo_swiss.mat"), "w")
+    file = matopen(string(@__DIR__,"/output_FS_topo.mat"), "w")
     write(file, "Vx_1", Vx_1)
     write(file, "Vx_2", Vx_2)
     write(file, "Vy_1", Vy_1)
     write(file, "Vy_2", Vy_2)
     write(file, "P_1", P_1)
     write(file, "P_2", P_2)
+
+    write(file, "duNddudx",duNddudx)
+    write(file, "duNddvdx",duNddvdx)
+    write(file, "duNdP"   ,duNdP   )   
+    write(file, "dvNddudx",dvNddudx)
+    write(file, "dvNddvdx",dvNddvdx)
+    write(file, "dvNdP"   ,dvNdP   ) 
+    write(file, "dkdx", dkdx)
+    write(file, "dkdy", dkdy)
+    write(file, "dedx", dedx)
+    write(file, "dedy", dedy)
+    write(file, "hx", h_x) 
     close(file)
 
     return
