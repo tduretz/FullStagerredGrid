@@ -7,9 +7,9 @@ import Plots:spy
 @views h(x,A,σ,b,x0)    = A*exp(-(x-x0)^2/σ^2) + b
 @views dhdx(x,A,σ,b,x0) = -2*x/σ^2*A*exp(-(x-x0).^2/σ^2)
 @views y_coord(y,ymin,z0,m)   = (y/ymin)*((z0+m))-z0
-function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy, swiss )
+function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy, mesh_def )
     y0    = ymax0
-    if swiss
+    if mesh_def.swiss_y
         ymin1 = (sinh.( σy.*(ymin0.-y0) ))
         ymax1 = (sinh.( σy.*(ymax0.-y0) ))
         sy    = (ymax0-ymin0)/(ymax1-ymin1)
@@ -17,13 +17,15 @@ function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy, swiss )
     else
         y     = X[2]
     end
-    z0    = -(A*exp(-(X[1]-x0)^2/σ^2) + b) # topography height
-    y     = (y/ymin0)*((z0+m))-z0        # shift grid vertically
+    if mesh_def.topo
+        z0    = -(A*exp(-(X[1]-x0)^2/σ^2) + b) # topography height
+        y     = (y/ymin0)*((z0+m))-z0        # shift grid vertically
+    end
     return y   
 end
 
-function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx, swiss )
-   if swiss
+function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx, mesh_def )
+   if mesh_def.swiss_x
         xmin1 = (sinh.( σx.*(xmin0.-x0) ))
         xmax1 = (sinh.( σx.*(xmax0.-x0) ))
         sx    = (xmax0-xmin0)/(xmax1-xmin1)
@@ -46,12 +48,12 @@ function Main_2D_DI()
     g          = (x = 0., z=-1.0)
     inclusion  = true
     adapt_mesh = true
-    swiss      = false
+    mesh_def   = ( swiss_x=true, swiss_y=true, topo=false)
     solve      = true
     comp       = false
     PS         = true
     # Numerics
-    nc         = (x=4,     y=4   )  # numerical grid resolution
+    nc         = (x=6,     y=6   )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1) # numerical grid resolution
     solver     = :PH_Cholesky
     ϵ          = 1e-8          # nonlinear tolerance
@@ -131,14 +133,14 @@ function Main_2D_DI()
         for i in eachindex(x_ini)          
             X_msh[1] = x_ini[i]
             X_msh[2] = y_ini[i]     
-            xv4[i]   = Mesh_x( X_msh,  Amp, x0, σ, y.max, m, x.min, x.max, σx, swiss )
-            yv4[i]   = Mesh_y( X_msh,  Amp, x0, σ, y.max, m, y.min, y.max, σy, swiss )
+            xv4[i]   = Mesh_x( X_msh,  Amp, x0, σ, y.max, m, x.min, x.max, σx, mesh_def )
+            yv4[i]   = Mesh_y( X_msh,  Amp, x0, σ, y.max, m, y.min, y.max, σy, mesh_def )
         end
         # Compute forward transformation
         params = (Amp=Amp, x0=x0, σ=σ, m=m, xmin=x.min, xmax=x.max, ymin=y.min, ymax=y.max, σx=σx, σy=σy, ϵ=ϵ)
         ∂x     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
         ∂y     = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
-        ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, x.min, x.max, y.min, y.max, σx, σy, ϵ, swiss)
+        ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, x.min, x.max, y.min, y.max, σx, σy, ϵ, mesh_def)
         # Solve for inverse transformation
         ∂ξ4 = (∂x=∂ξ∂x, ∂y=∂ξ∂y); ∂η4 = (∂x=∂η∂x, ∂y=∂η∂y)
         InverseJacobian!(∂ξ4,∂η4,∂x,∂y)
@@ -158,7 +160,6 @@ function Main_2D_DI()
     ∂η.∂x.ey .= ∂η∂x[1:2:end-0,2:2:end-1]; ∂η.∂x.c .= ∂η∂x[2:2:end-1,2:2:end-1]
     ∂η.∂y.ex .= ∂η∂y[2:2:end-1,1:2:end-0]; ∂η.∂y.v .= ∂η∂y[1:2:end-0,1:2:end-0]
     ∂η.∂y.ey .= ∂η∂y[1:2:end-0,2:2:end-1]; ∂η.∂y.c .= ∂η∂y[2:2:end-1,2:2:end-1]
-    display(size(hx[2:2:end-1,end-1]))
     BC.∂h∂x  .=   hx[2:2:end-1,end-1]
     # Velocity
     V.x.v .= -PS*ε̇bg.*x.v .+ (1-PS)*ε̇bg.*y.v; V.x.c .= -PS*ε̇bg.*x.c .+ (1-PS)*ε̇bg.*y.c
@@ -299,6 +300,27 @@ function Main_2D_DI()
     #################
     K  = [Kuuj Kupj; Kpuj Kppj]
     f  = [fu; fp]
+
+
+    Kdiff =  Kuuj.-Kuuj'
+    # display( Kdiff.nzval )
+
+    # display( R.x.v[2:end-1,2:end-1])
+    # # if err_x<ϵ && err_y<ϵ && err_p<ϵ
+    # #     @printf("Converged!\n")
+    # #     break
+    # # end
+    display(Δ )
+    p=spy(Kuuj.-Kuuj', c=:RdBu)
+    # # p=spy(Kuuj, c=:RdBu)
+    # # p=spy(Kpu, c=:RdBu)
+    # # p=spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
+    # # @show dropzeros!(Kuuj.-Kuuj')
+    # # @show dropzeros!(Kupj.+Kpuj')
+    display(p)
+    cholesky(Kuu_PC)
+
+
     δx = K\f
 
     # @show (Kppj)
@@ -320,32 +342,35 @@ function Main_2D_DI()
     @printf("Ry = %2.9e\n", err_y )
     @printf("Rp = %2.9e\n", err_p )
 
-    # display( R.x.v[2:end-1,2:end-1])
-    # # if err_x<ϵ && err_y<ϵ && err_p<ϵ
-    # #     @printf("Converged!\n")
-    # #     break
-    # # end
 
-    p=spy(Kuu.-Kuu', c=:RdBu)
-    # # p=spy(Kuuj, c=:RdBu)
-    # # p=spy(Kpu, c=:RdBu)
-    # # p=spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
-    # # @show dropzeros!(Kuuj.-Kuuj')
-    # # @show dropzeros!(Kupj.+Kpuj')
-    display(p)
-    cholesky(Kuu_PC)
     @printf("%2.2e --- %2.2e\n",  minimum(R.x.v),  maximum(R.x.v))
     @printf("%2.2e --- %2.2e\n",  minimum(R.x.c),  maximum(R.x.c))
     @printf("%2.2e --- %2.2e\n",  minimum(R.y.v),  maximum(R.y.v))
     @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
     @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
     @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
-    
+    #-----------
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂x.c),  maximum(∂ξ.∂x.c))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂x.v),  maximum(∂ξ.∂x.v))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂x.ex),  maximum(∂ξ.∂x.ex))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂x.ey),  maximum(∂ξ.∂x.ey))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂y.c),  maximum(∂ξ.∂y.c))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂y.v),  maximum(∂ξ.∂y.v))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂y.ex),  maximum(∂ξ.∂y.ex))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂ξ.∂y.ey),  maximum(∂ξ.∂y.ey))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂x.c),  maximum(∂η.∂x.c))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂x.v),  maximum(∂η.∂x.v))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂x.ex),  maximum(∂η.∂x.ex))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂x.ey),  maximum(∂η.∂x.ey))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂y.c),  maximum(∂η.∂y.c))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂y.v),  maximum(∂η.∂y.v))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂y.ex),  maximum(∂η.∂y.ex))
+    # @printf("%2.2e --- %2.2e\n",  minimum(∂η.∂y.ey),  maximum(∂η.∂y.ey))
 
-    # # Visualise
+    # Visualise
     # vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     # verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
-    # sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    # sol   = ( vx=R.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
     # PatchPlotMakieBasic(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
  
     ####################
