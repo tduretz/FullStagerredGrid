@@ -1,4 +1,4 @@
-# Deformed free surface
+# Locally compressible layer pure shear
 using FullStaggeredGrid
 using Printf, ExtendableSparse, LinearAlgebra, MAT
 import SparseArrays:spdiagm, dropzeros!
@@ -40,48 +40,34 @@ end
 
 function Main_2D_DI()
     # Physics
-    x          = (min=-3.0, max=3.0)  
-    y          = (min=-5.0, max=0.0)
-    ε̇bg        = -0.0
-    rad        = 0.5
-    y0         = -2.0*1.0
-    g          = (x = 0., z=-1.0)
-    inclusion  = false
+    x          = (min=-.5, max=.5)  
+    y          = (min=-.5, max=.5)
+    ε̇bg        = 1.0
+    rad        = 0.133333333/2.
+    y0         = -2*0.
+    g          = (x = 0., z=-1.0*0.0)
+    inclusion  = true
     symmetric  = false
-    adapt_mesh = true
-    mesh_def   = ( swiss_x=false, swiss_y=false, topo=true)
+    adapt_mesh = false
+    mesh_def   = ( swiss_x=false, swiss_y=false, topo=false)
     # Boundary conditions
-    BCVx = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:FreeSurface)
-    BCVy = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:FreeSurface)
-
-    # x          = (min=-3.0, max=3.0)  
-    # y          = (min=-3.0, max=3.0)
-    # ε̇bg        = -1.0
-    # rad        = 0.5
-    # y0         = -2*0.
-    # g          = (x = 0., z=-1.0*0.0)
-    # inclusion  = true
-    # symmetric  = false
-    # adapt_mesh = true
-    # mesh_def   = ( swiss_x=true, swiss_y=true, topo=false)
-    # # Boundary conditions
-    # BCVx = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
-    # BCVy = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
+    BCVx = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
+    BCVy = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:Dirichlet)
     ##############################
     solve      = true
-    comp       = false
+    comp       = true
     PS         = true
     # Numerics
-    nc         = (x=71,     y=71   )  # numerical grid resolution
+    nc         = (x=50,    y=50   )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1) # numerical grid resolution
     solver     = :DI
-    fact       = :Cholesky
-    # fact       = :LU
+    # fact       = :Cholesky
+    fact       = :LU
     ϵ          = 1e-8          # nonlinear tolerance
     iterMax    = 20            # max number of iters
     penalty    = 1e5
     # Preprocessing
-    Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y, t=1.0)
+    Δ          = (x=(x.max-x.min)/nc.x, y=(y.max-y.min)/nc.y, t=1e4)
     # Array initialisation
     V        = ( x   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)),  # v: vertices --- c: centroids
                  y   = (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) ) 
@@ -112,12 +98,12 @@ function Main_2D_DI()
                  p   = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)) ) 
     ρ        = ( (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) )
     η        = (  ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)  )
-    K        = (  ex =  ones(nc.x+2, nv.y+2), ey =  ones(nv.x+2, nc.y+2)  )
+    K        = (  ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)  )
     β        = (  ex = zeros(Bool, nc.x+2, nv.y+2), ey = zeros(Bool, nv.x+2, nc.y+2)  )
     BC       = (x = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
                 y = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
-                p = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2, nc.y+2)), 
-                ε̇ = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2, nc.y+2)),
+                p = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)), 
+                ε̇ = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)),
                 C0=zeros(nc.x+2), C1=zeros(nc.x+2), C2=zeros(nc.x+2),
                 D0=zeros(nc.x+2), D1=zeros(nc.x+2), D2=zeros(nc.x+2), ∂h∂x=zeros(nc.x+2) )
     Num      = ( x   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
@@ -154,16 +140,6 @@ function Main_2D_DI()
             yv4[i]   = Mesh_y( X_msh,  Amp, x0, σ, y.max, m, y.min, y.max, σy, mesh_def )
         end
         BC.∂h∂x  .=   hx[2:2:end-1,end-1]
-        # # Compute forward transformation
-        # params = (Amp=Amp, x0=x0, σ=σ, m=m, xmin=x.min, xmax=x.max, ymin=y.min, ymax=y.max, σx=σx, σy=σy, ϵ=ϵ)
-        # ∂x4    = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
-        # ∂y4    = (∂ξ=zeros(size(yv4)), ∂η = zeros(size(yv4)) )
-        # ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x4, ∂y4, x_ini, y_ini, X_msh, Amp, x0, σ, m, x.min, x.max, y.min, y.max, σx, σy, ϵ, mesh_def)
-        # # Solve for inverse transformation
-        # ∂ξ4 = (∂x=∂ξ∂x, ∂y=∂ξ∂y); ∂η4 = (∂x=∂η∂x, ∂y=∂η∂y)
-        # InverseJacobian!(∂ξ4,∂η4,∂x4,∂y4)
-        # ∂ξ∂x .= ∂ξ4.∂x; ∂ξ∂y .= ∂ξ4.∂y
-        # ∂η∂x .= ∂η4.∂x; ∂η∂y .= ∂η4.∂y
     end
 
     xv2_1, yv2_1 = xv4[3:2:end-2,3:2:end-2  ], yv4[3:2:end-2,3:2:end-2  ]
@@ -206,15 +182,6 @@ function Main_2D_DI()
     InverseJacobian2!(∂ξ.∂x.ey,∂η.∂x.ey,∂ξ.∂y.ey,∂η.∂y.ey, ∂x.∂ξ.ey,∂x.∂η.ey,∂y.∂ξ.ey,∂y.∂η.ey)
     InverseJacobian2!(∂ξ.∂x.v ,∂η.∂x.v ,∂ξ.∂y.v ,∂η.∂y.v , ∂x.∂ξ.v ,∂x.∂η.v ,∂y.∂ξ.v ,∂y.∂η.v )
     InverseJacobian2!(∂ξ.∂x.c ,∂η.∂x.c ,∂ξ.∂y.c ,∂η.∂y.c , ∂x.∂ξ.c ,∂x.∂η.c ,∂y.∂ξ.c ,∂y.∂η.c )
-
-    # ∂ξ.∂x.ex .= ∂ξ∂x[2:2:end-1,1:2:end-0]; ∂ξ.∂x.v .= ∂ξ∂x[1:2:end-0,1:2:end-0]
-    # ∂ξ.∂x.ey .= ∂ξ∂x[1:2:end-0,2:2:end-1]; ∂ξ.∂x.c .= ∂ξ∂x[2:2:end-1,2:2:end-1]
-    # ∂ξ.∂y.ex .= ∂ξ∂y[2:2:end-1,1:2:end-0]; ∂ξ.∂y.v .= ∂ξ∂y[1:2:end-0,1:2:end-0]
-    # ∂ξ.∂y.ey .= ∂ξ∂y[1:2:end-0,2:2:end-1]; ∂ξ.∂y.c .= ∂ξ∂y[2:2:end-1,2:2:end-1]
-    # ∂η.∂x.ex .= ∂η∂x[2:2:end-1,1:2:end-0]; ∂η.∂x.v .= ∂η∂x[1:2:end-0,1:2:end-0]
-    # ∂η.∂x.ey .= ∂η∂x[1:2:end-0,2:2:end-1]; ∂η.∂x.c .= ∂η∂x[2:2:end-1,2:2:end-1]
-    # ∂η.∂y.ex .= ∂η∂y[2:2:end-1,1:2:end-0]; ∂η.∂y.v .= ∂η∂y[1:2:end-0,1:2:end-0]
-    # ∂η.∂y.ey .= ∂η∂y[1:2:end-0,2:2:end-1]; ∂η.∂y.c .= ∂η∂y[2:2:end-1,2:2:end-1]
     
     @printf("__________\n")
     @printf("min(∂ξ∂x) = %1.6f --- max(∂ξ∂x) = %1.6f\n", minimum(∂ξ.∂x.c), maximum(∂ξ.∂x.c))
@@ -226,22 +193,20 @@ function Main_2D_DI()
     V.x.v .= -PS*ε̇bg.*x.v .+ (1-PS)*ε̇bg.*y.v; V.x.c .= -PS*ε̇bg.*x.c .+ (1-PS)*ε̇bg.*y.c
     V.y.v .=  PS*ε̇bg.*y.v;                    V.y.c .=  PS*ε̇bg.*y.c
     # Viscosity
-    η.ex  .=  1.0; η.ey  .=  1.0
-    β.ex  .= true; β.ey  .= true
-    K.ex  .=  1e5; K.ey  .=  1e5
+    η.ex  .= 1.0e-1; η.ey  .= 1.0e-1 
+    K.ex  .= 1.0e-5; K.ey  .= 1.0e-5 
+    β.ex  .= false;  β.ey  .= false
     if inclusion
-        η.ex[x.ex.^2 .+ (y.ex.-y0).^2 .< rad] .= 100.
-        η.ey[x.ey.^2 .+ (y.ey.-y0).^2 .< rad] .= 100.
+        η.ex[ (y.ex.-y0).^2 .< rad.^2] .= 1.
+        η.ey[ (y.ey.-y0).^2 .< rad.^2] .= 1.
+        β.ex[ (y.ex.-y0).^2 .< rad.^2] .= true
+        β.ey[ (y.ey.-y0).^2 .< rad.^2] .= true
     end
     D.v11.ex .= 2 .* η.ex;      D.v11.ey .= 2 .* η.ey
     D.v22.ex .= 2 .* η.ex;      D.v22.ey .= 2 .* η.ey
     D.v33.ex .= 2 .* η.ex;      D.v33.ey .= 2 .* η.ey
     # Density
     ρ.v  .= 1.0; ρ.c  .= 1.0
-    if inclusion
-        ρ.v[x.v.^2 .+ (y.v.-y0).^2 .< rad] .= 2.
-        ρ.c[x.c.^2 .+ (y.c.-y0).^2 .< rad] .= 2.
-    end
     BC.x.v[2:end-1,2:end-1]  .= 0 # inner points
     BC.y.v[2:end-1,2:end-1]  .= 0 # inner points
     BC.x.c[2:end-1,2:end-1]  .= 0 # inner points
@@ -323,21 +288,11 @@ function Main_2D_DI()
     Kppi  = ExtendableSparseMatrix(ndofP, ndofP)
     @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Kppi, Num, BC, D, β, K, ∂ξ, ∂η, Δ, nc, nv, penalty, comp, symmetric)
 
-
-    Kuu_PC   = ExtendableSparseMatrix(ndofV, ndofV)
-    Kup_PC   = ExtendableSparseMatrix(ndofV, ndofP)
-    Kpu_PC   = ExtendableSparseMatrix(ndofP, ndofV)
-    Kpp_PC   = ExtendableSparseMatrix(ndofP, ndofP)
-    Kppi_PC  = ExtendableSparseMatrix(ndofP, ndofP)
-    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Kppi, Num, BC, D, β, K, ∂ξ, ∂η, Δ, nc, nv, penalty, comp, true)
-
     KuuJ  = dropzeros!(Kuu.cscmatrix)
     KupJ  = dropzeros!(Kup.cscmatrix)
     KpuJ  = dropzeros!(Kpu.cscmatrix)
     KppJ  = dropzeros!(Kpp.cscmatrix)
     KppiJ = dropzeros!(Kppi.cscmatrix)
-
-    KuuPC  = dropzeros!(Kuu_PC.cscmatrix)
 
     # p=spy(Kuuj .- Kuuj', c=:RdBu,  size=(600,600))
     # display(p)
@@ -357,18 +312,13 @@ function Main_2D_DI()
 
         # p=spy(Kppj, c=:RdBu,  size=(600,600))
         # display(p)
-
-
-
         
     if solver==:DI
         # Decoupled solve
         t = @elapsed Kuu_SC = KuuJ .- KupJ*(KppiJ*KpuJ)
         @printf("Build Kuu_SC took = %02.2e s\n", t)
         if fact == :Cholesky 
-            # t = @elapsed Kf    = cholesky(Hermitian( (Kuu_SC) ))
-            Kuu_SC1 = KuuPC .- KupJ*(KppiJ*KpuJ)
-            t = @elapsed Kf    = cholesky(Hermitian( Kuu_SC1 ))
+            t = @elapsed Kf    = cholesky(Hermitian( (Kuu_SC) ))
             # t = @elapsed Kf    = cholesky(Hermitian( 0.5.*(Kuu_SC.+Kuu_SC') ))
             @printf("Cholesky took = %02.2e s\n", t)
         elseif fact == :LU 
@@ -394,125 +344,6 @@ function Main_2D_DI()
             δu   .= Kf\fusc
             δp  .+= KppiJ*(fp .- KpuJ*δu .- KppJ*δp)
         end
-
-    # nV   = maximum(Num.y.c)
-    # nP   = maximum(Num.p.ey)
-    # fu   = zeros(nV)
-    # fp   = zeros(nP)
-    # fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
-    # fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
-    # fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
-    # fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
-    # fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
-    # fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
-
-    # @printf("Solving linear system\n")
-
-    # # KSP_GCR_Jacobian!( u, Kuuscj, fusc, 5e-6, 2, Kf, f, v, s, val, VV, SS, restart  )
-
-    # Kpp = spdiagm( zeros(nP) )
-    # # Decoupled solve
-    # if comp==false 
-    #     npdof = maximum(Num.p.ey)
-    #     coef  = zeros(npdof)
-    #     for i in eachindex(coef)
-    #         coef[i] = penalty#.*mesh.ke./mesh.Ω
-    #     end
-    #     Kppi  = spdiagm(coef)
-    # else
-    #     Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
-    # end
-    # @printf("Done with Kppi\n")
-    # Kuu_SC = Kuuj - Kupj*(Kppi*Kpuj)
-    # @show typeof(Kuu_SC)
-    # @printf("Done with Kuu_SC\n")
-    # K_PC   = 0.5.*(Kuu_SC' .+ Kuu_SC)
-    # t = @elapsed Kf    = cholesky(Hermitian(K_PC), check=false)
-    # # t = @elapsed Kf    = cholesky((Kuu_SC))
-    # # t = @elapsed Kf = lu(Kuu_SC)
-    # @printf("Cholesky took = %02.2e s\n", t)
-
-
-    # if solver == :PH_Cholesky
-    #     t = @elapsed Kf    = cholesky((Kuu_SC))
-    #     @printf("Cholesky took = %02.2e s\n", t)
-    # elseif solver == :PH_LU 
-    #     t = @elapsed Kf    = lu(Kuu_SC)
-    #     @printf("LU took = %02.2e s\n", t)
-    # end
-
-    # restart = 20
-    # f       = zeros(Float64, length(fu))
-    # v       = zeros(Float64, length(fu))
-    # s       = zeros(Float64, length(fu))
-    # val     = zeros(Float64, restart)
-    # VV      = zeros(Float64, (length(fu), restart) )  # !!!!!!!!!! allocate in the right sense :D
-    # SS      = zeros(Float64, (length(fu), restart) )
-
-    # δu    = zeros(nV, 1)
-    # ru    = zeros(nV, 1)
-    # fusc  = zeros(nV, 1)
-    # δp    = zeros(nP, 1)
-    # rp    = zeros(nP, 1)
-    # ######################################
-    # # Iterations
-    # for rit=1:20
-    #     ru   .= fu .- Kuuj*δu .- Kupj*δp
-    #     rp   .= fp .- Kpuj*δu .- Kppj*δp
-    #     nrmu, nrmp = norm(ru), norm(rp)
-    #     @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
-    #     if nrmu/sqrt(length(ru)) < ϵ && nrmp/sqrt(length(ru)) < ϵ
-    #         break
-    #     end
-    #     fusc .= fu  .- Kupj*(Kppi*fp .+ δp)
-    #     # δu   .= Kf\fusc
-    #     KSP_GCR_Jacobian!( δu, Kuu_SC, fusc, 5e-3, 2, Kf, f, v, s, val, VV, SS, restart  )
-    #     δp  .+= Kppi*(fp .- Kpuj*δu .- Kppj*δp)
-    # end
-
-
-        # @time if symmetric
-        # Kpp = spdiagm( zeros(nP) )
-        # # Decoupled solve
-        # if comp==false 
-        #     npdof = maximum(Num.p.ey)
-        #     coef  = zeros(npdof)
-        #     for i in eachindex(coef)
-        #         coef[i] = penalty#.*mesh.ke./mesh.Ω
-        #     end
-        #     Kppi  = spdiagm(coef)
-        # else
-        #     Kppi  = spdiagm( 1.0 ./ diag(Kpp) )
-        # end
-        # @printf("Done with Kppi\n")
-        # Kuu_SC = Kuuj - Kupj*(Kppi*Kpuj)
-        # @printf("Done with Kuu_SC\n")
-        # if solver == :PH_Cholesky
-        #     t = @elapsed Kf    = cholesky((Kuu_SC))
-        #     @printf("Cholesky took = %02.2e s\n", t)
-        # elseif solver == :PH_LU 
-        #     t = @elapsed Kf    = lu(Kuu_SC)
-        #     @printf("LU took = %02.2e s\n", t)
-        # end
-        # δu    = zeros(nV, 1)
-        # ru    = zeros(nV, 1)
-        # fusc  = zeros(nV, 1)
-        # δp    = zeros(nP, 1)
-        # rp    = zeros(nP, 1)
-        # ######################################
-        # # Iterations
-        # for rit=1:20
-        #     ru   .= fu .- Kuuj*δu .- Kupj*δp
-        #     rp   .= fp .- Kpuj*δu .- Kppj*δp
-        #     nrmu, nrmp = norm(ru), norm(rp)
-        #     @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
-        #     if nrmu/sqrt(length(ru)) < ϵ && nrmp/sqrt(length(ru)) < ϵ
-        #         break
-        #     end
-        #     fusc .= fu  .- Kupj*(Kppi*fp .+ δp)
-        #     δu   .= Kf\fusc
-        #     δp  .+= Kppi*(fp .- Kpuj*δu .- Kppj*δp)
-        # end
         # Global Newton update
         V.x.v[2:end-1, 2:end-1] .-= δu[Num.x.v[2:end-1, 2:end-1]]
         V.y.v[2:end-1, 2:end-1] .-= δu[Num.y.v[2:end-1, 2:end-1]]
@@ -527,10 +358,10 @@ function Main_2D_DI()
         # Kppj[end,:] .= 0.
         # Kppj[end,end] = 1.0
 
-        J  = [KuuJ KupJ; KpuJ KppJ]
+        K  = [KuuJ KupJ; KpuJ KppJ]
         f  = [fu; fp]
         # Solve
-        δx = J\f
+        δx = K\f
         # Extract
         V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
         V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
@@ -565,86 +396,12 @@ function Main_2D_DI()
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
     sol   = ( vx=V.x.c[2:end-1,2:end-1][:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    sol   = ( vx= log10.(abs.(avWESN(∇v.ex[2:end-1,2:end-1], ∇v.ey[2:end-1,2:end-1])[:])), vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+    # sol   = ( vx= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:], vy=V.y.c[2:end-1,2:end-1][:], p= avWESN(P.ex[2:end-1,2:end-1], P.ey[2:end-1,2:end-1])[:])
+
     PatchPlotMakieBasic(vertx, verty, sol, x.min, x.max, y.min, y.max, write_fig=false)
- 
-    ####################
-    # if swiss
-    #     file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_topo_swiss.mat"))
-    # else
-    #     file = matopen(string(@__DIR__,"/../scripts_2D_PT/output_FS_topo.mat"))
-    # end
-    # Vx_1 = read(file, "Vx_1") 
-    # Vx_2 = read(file, "Vx_2")
-    # Vy_1 = read(file, "Vy_1") 
-    # Vy_2 = read(file, "Vy_2")
-    # P_1  = read(file, "P_1" ) 
-    # P_2  = read(file, "P_2" )
-    # duNddudx = read(file, "duNddudx")
-    # duNddvdx = read(file, "duNddvdx")
-    # duNdP    = read(file, "duNdP"   )   
-    # dvNddudx = read(file, "dvNddudx")
-    # dvNddvdx = read(file, "dvNddvdx")
-    # dvNdP    = read(file, "dvNdP"   )  
-    # dkdx = read(file,  "dkdx")
-    # dkdy = read(file,  "dkdy")
-    # dedx = read(file,  "dedx")
-    # dedy = read(file,  "dedy")
-    # h_x  = read(file,  "hx" )
 
-    # # display(dkdx')
-    # # display(dkdy')
-    # # for i=1:length(h_x)
-    # #     print(h_x[i], ' ' )
-    # # end
-    # # print("\n")
-    # # for i=1:length(h_x)
-    # #     print(dedx[i], ' ' )
-    # # end
-    # # print("\n")
-
-    # close(file)
-
-    # V.x.v[2:end-1,2:end-1] .= Vx_1
-    # V.x.c .= Vx_2
-    # V.y.v[2:end-1,2:end-1] .= Vy_1
-    # V.y.c .= Vy_2
-    # P.ex[2:end-1,2:end-1] .= P_1
-    # P.ey[2:end-1,2:end-0] .= P_2
-
-
-    # # display(norm(BC.C0[2:end-1].-duNdP./Δ.y))
-    # # display(norm(BC.C1[2:end-1].-duNddudx./Δ.y))
-    # # display(norm(BC.C2[2:end-1].-duNddvdx./Δ.y))
-
-    # # display(norm(BC.D0[2:end-1].-dvNdP./Δ.y))
-    # # display(norm(BC.D1[2:end-1].-dvNddudx./Δ.y))
-    # # display(norm(BC.D2[2:end-1].-dvNddvdx./Δ.y))
-
-    # # BC.C0[2:end-1] .= duNdP./Δ.y
-    # # BC.C1[2:end-1] .= duNddudx./Δ.y
-    # # BC.C2[2:end-1] .= duNddvdx./Δ.y
-    # # BC.D0[2:end-1] .= dvNdP./Δ.y
-    # # BC.D1[2:end-1] .= dvNddudx./Δ.y
-    # # BC.D2[2:end-1] .= dvNddvdx./Δ.y
-
-    # DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
-    # LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
-    # # Display residuals
-    # err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
-    # err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
-    # err_p = max(norm(R.p.ex)/length(R.p.ex), norm(R.p.ey)/length(R.p.ey))
-    # @printf("Rx = %2.9e\n", err_x )
-    # @printf("Ry = %2.9e\n", err_y )
-    # @printf("Rp = %2.9e\n", err_p )
-
-    # @printf("%2.2e --- %2.2e\n",  minimum(R.x.v),  maximum(R.x.v))
-    # @printf("%2.2e --- %2.2e\n",  minimum(R.x.c),  maximum(R.x.c))
-    # @printf("%2.2e --- %2.2e\n",  minimum(R.y.v),  maximum(R.y.v))
-    # @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
-    # @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
-    # @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
-
-    display(R.p.ex)
+    # display(R.p.ex)
 
 end
 

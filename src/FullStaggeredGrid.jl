@@ -3,6 +3,7 @@ module FullStaggeredGrid
 using Plots, Printf, LinearAlgebra, SpecialFunctions, CairoMakie, Makie.GeometryBasics
 using ExtendableSparse
 import SparseArrays:spdiagm
+import ForwardDiff:gradient!
 
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
@@ -19,6 +20,14 @@ export DevStrainRateStressTensor!
 
 include("FSG_Residual.jl")
 export LinearMomentumResidual!
+
+include("FSG_FreeSurface.jl")
+export UpdateFreeSurfaceCoefficients!
+
+include("FSG_MeshDeformation.jl")
+export ComputeForwardTransformation!
+export InverseJacobian!
+export InverseJacobian2!
 
 include("FSG_Visu.jl")
 export PatchPlotMakieBasic
