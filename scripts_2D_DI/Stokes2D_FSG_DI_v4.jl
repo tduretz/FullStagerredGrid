@@ -21,7 +21,7 @@ function Mesh_y( X, A, x0, σ, b, m, ymin0, ymax0, σy, mesh_def )
     end
     if mesh_def.topo
         z0    = -(A*exp(-(X[1]-x0)^2/σ^2) + b) # topography height
-        y     = (y/ymin0)*((z0+m))-z0        # shift grid vertically
+        y     = (y/ymin0)*((z0+m))-z0          # shift grid vertically
     end
     return y   
 end
@@ -49,7 +49,7 @@ function Main_2D_DI()
     inclusion  = false
     symmetric  = false
     adapt_mesh = true
-    mesh_def   = ( swiss_x=false, swiss_y=false, topo=true)
+    mesh_def   = ( swiss_x=true, swiss_y=true, topo=true)
     # Boundary conditions
     BCVx = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:FreeSurface)
     BCVy = (West=:Dirichlet, East=:Dirichlet, South=:Dirichlet, North=:FreeSurface)
@@ -75,8 +75,8 @@ function Main_2D_DI()
     nc         = (x=71,     y=71   )  # numerical grid resolution
     nv         = (x=nc.x+1, y=nc.y+1) # numerical grid resolution
     solver     = :DI
-    fact       = :Cholesky
-    # fact       = :LU
+    # fact       = :Cholesky
+    fact       = :LU
     ϵ          = 1e-8          # nonlinear tolerance
     iterMax    = 20            # max number of iters
     penalty    = 1e5
@@ -288,7 +288,6 @@ function Main_2D_DI()
     end
     # Free surface coefficients
     UpdateFreeSurfaceCoefficients!( BC, D, ∂ξ, ∂η )
-
     DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
     LinearMomentumResidual!( R, ∇v, τ, P, P0, β, K, ρ, g, ∂ξ, ∂η, Δ, BC, comp, symmetric )
     # Display residuals
@@ -323,7 +322,6 @@ function Main_2D_DI()
     Kppi  = ExtendableSparseMatrix(ndofP, ndofP)
     @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Kppi, Num, BC, D, β, K, ∂ξ, ∂η, Δ, nc, nv, penalty, comp, symmetric)
 
-
     Kuu_PC   = ExtendableSparseMatrix(ndofV, ndofV)
     Kup_PC   = ExtendableSparseMatrix(ndofV, ndofP)
     Kpu_PC   = ExtendableSparseMatrix(ndofP, ndofV)
@@ -339,28 +337,17 @@ function Main_2D_DI()
 
     KuuPC  = dropzeros!(Kuu_PC.cscmatrix)
 
-    # p=spy(Kuuj .- Kuuj', c=:RdBu,  size=(600,600))
-    # display(p)
+    nV   = maximum(Num.y.c)
+    nP   = maximum(Num.p.ey)
+    fu   = zeros(nV)
+    fp   = zeros(nP)
+    fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
+    fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
+    fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
+    fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
+    fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
+    fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
 
-
-        nV   = maximum(Num.y.c)
-        nP   = maximum(Num.p.ey)
-        fu   = zeros(nV)
-        fp   = zeros(nP)
-        fu[Num.x.v[2:end-1,2:end-1]]  .= R.x.v[2:end-1,2:end-1]
-        fu[Num.y.v[2:end-1,2:end-1]]  .= R.y.v[2:end-1,2:end-1]
-        fu[Num.x.c[2:end-1,2:end-1]]  .= R.x.c[2:end-1,2:end-1]
-        fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
-        fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
-        fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
-        
-
-        # p=spy(Kppj, c=:RdBu,  size=(600,600))
-        # display(p)
-
-
-
-        
     if solver==:DI
         # Decoupled solve
         t = @elapsed Kuu_SC = KuuJ .- KupJ*(KppiJ*KpuJ)
@@ -643,9 +630,6 @@ function Main_2D_DI()
     # @printf("%2.2e --- %2.2e\n",  minimum(R.y.c),  maximum(R.y.c))
     # @printf("%2.2e --- %2.2e\n",  minimum(R.p.ex),  maximum(R.p.ex))
     # @printf("%2.2e --- %2.2e\n",  minimum(R.p.ey),  maximum(R.p.ey))
-
-    display(R.p.ex)
-
 end
 
 Main_2D_DI()

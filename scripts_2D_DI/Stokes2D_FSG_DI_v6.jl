@@ -178,10 +178,10 @@ function Main_2D_DI()
     ∂y.∂η.v[:,2:end-1]  .= (yey2[:,2:end] .- yey2[:,1:end-1]) ./ Δ.y
     ∂y.∂η.c             .= (yex2[:,2:end] .- yex2[:,1:end-1]) ./ Δ.y 
 
-    InverseJacobian2!(∂ξ.∂x.ex,∂η.∂x.ex,∂ξ.∂y.ex,∂η.∂y.ex, ∂x.∂ξ.ex,∂x.∂η.ex,∂y.∂ξ.ex,∂y.∂η.ex)
-    InverseJacobian2!(∂ξ.∂x.ey,∂η.∂x.ey,∂ξ.∂y.ey,∂η.∂y.ey, ∂x.∂ξ.ey,∂x.∂η.ey,∂y.∂ξ.ey,∂y.∂η.ey)
-    InverseJacobian2!(∂ξ.∂x.v ,∂η.∂x.v ,∂ξ.∂y.v ,∂η.∂y.v , ∂x.∂ξ.v ,∂x.∂η.v ,∂y.∂ξ.v ,∂y.∂η.v )
-    InverseJacobian2!(∂ξ.∂x.c ,∂η.∂x.c ,∂ξ.∂y.c ,∂η.∂y.c , ∂x.∂ξ.c ,∂x.∂η.c ,∂y.∂ξ.c ,∂y.∂η.c )
+    InverseJacobian2!(∂ξ.∂x.ex, ∂η.∂x.ex, ∂ξ.∂y.ex, ∂η.∂y.ex, ∂x.∂ξ.ex,∂x.∂η.ex,∂y.∂ξ.ex,∂y.∂η.ex)
+    InverseJacobian2!(∂ξ.∂x.ey, ∂η.∂x.ey, ∂ξ.∂y.ey, ∂η.∂y.ey, ∂x.∂ξ.ey,∂x.∂η.ey,∂y.∂ξ.ey,∂y.∂η.ey)
+    InverseJacobian2!(∂ξ.∂x.v , ∂η.∂x.v , ∂ξ.∂y.v , ∂η.∂y.v , ∂x.∂ξ.v ,∂x.∂η.v ,∂y.∂ξ.v ,∂y.∂η.v )
+    InverseJacobian2!(∂ξ.∂x.c , ∂η.∂x.c , ∂ξ.∂y.c , ∂η.∂y.c , ∂x.∂ξ.c ,∂x.∂η.c ,∂y.∂ξ.c ,∂y.∂η.c )
     
     @printf("__________\n")
     @printf("min(∂ξ∂x) = %1.6f --- max(∂ξ∂x) = %1.6f\n", minimum(∂ξ.∂x.c), maximum(∂ξ.∂x.c))

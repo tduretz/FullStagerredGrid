@@ -1,6 +1,6 @@
 module FullStaggeredGrid
 
-using Plots, Printf, LinearAlgebra, SpecialFunctions, CairoMakie, Makie.GeometryBasics
+using Revise, Plots, Printf, LinearAlgebra, SpecialFunctions, GLMakie, Makie.GeometryBasics
 using ExtendableSparse
 import SparseArrays:spdiagm
 import ForwardDiff:gradient!

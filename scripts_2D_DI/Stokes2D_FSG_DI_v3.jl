@@ -16,6 +16,7 @@ function Main_2D_DI()
     y0         = -2.0*1.0
     g          = (x = 0., z=-1.0)
     inclusion  = true
+    symmetric  = false
     adapt_mesh = true
     solve      = true
     comp       = false
@@ -40,6 +41,7 @@ function Main_2D_DI()
                  xy  = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)) )
     ∇v       = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
     P        = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
+    P0       = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
     D        = ( v11 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
                  v12 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),  
                  v13 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
@@ -58,6 +60,8 @@ function Main_2D_DI()
                  p   = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)) ) 
     ρ        = ( (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) )
     η        = (  ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)  )
+    K        = (  ex =  ones(nc.x+2, nv.y+2), ey =  ones(nv.x+2, nc.y+2)  )
+    β        = (  ex = zeros(Bool, nc.x+2, nv.y+2), ey = zeros(Bool, nv.x+2, nc.y+2)  )
     BC       = (x = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
                 y = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
                 p = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)), 
@@ -145,9 +149,9 @@ function Main_2D_DI()
     end
     # Free surface coefficients
     UpdateFreeSurfaceCoefficients!( BC, D, ∂ξ, ∂η )
-
     DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
-    LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    LinearMomentumResidual!( R, ∇v, τ, P, P0, β, K, ρ, g, ∂ξ, ∂η, Δ, BC, comp, symmetric )
+    
     # Display residuals
     err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
     err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
@@ -170,6 +174,7 @@ function Main_2D_DI()
     Num.y.c[ 2:end-1,2:end-1] .= reshape(1:((nc.x)*(nc.y)), nc.x, nc.y) .+ maximum(Num.x.c)
     Num.p.ex[2:end-1,2:end-1] .= reshape(1:((nc.x)*(nv.y)), nc.x, nv.y) 
     Num.p.ey[2:end-1,2:end-1] .= reshape(1:((nv.x)*(nc.y)), nv.x, nc.y) .+ maximum(Num.p.ex)
+    
     # Initial sparse
     println("Initial Assembly")
     ndofV = maximum(Num.y.c)
@@ -178,7 +183,8 @@ function Main_2D_DI()
     Kup   = ExtendableSparseMatrix(ndofV, ndofP)
     Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
     Kpp   = ExtendableSparseMatrix(ndofP, ndofP)
-    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
+    Kppi  = ExtendableSparseMatrix(ndofP, ndofP)
+    @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Kppi, Num, BC, D, β, K, ∂ξ, ∂η, Δ, nc, nv, penalty, comp, symmetric)
 
     Kuuj = Kuu.cscmatrix
     Kupj = Kup.cscmatrix
@@ -195,7 +201,6 @@ function Main_2D_DI()
     fu[Num.y.c[2:end-1,2:end-1]]  .= R.y.c[2:end-1,2:end-1]
     fp[Num.p.ex[2:end-1,2:end-1]] .= R.p.ex[2:end-1,2:end-1]
     fp[Num.p.ey[2:end-1,2:end-1]] .= R.p.ey[2:end-1,2:end-1]
-
     Kpp = spdiagm( zeros(nP) )
 
     # Decoupled solve
@@ -212,11 +217,9 @@ function Main_2D_DI()
     Kuu_SC = Kuuj .- Kupj*(Kppi*Kpuj)
 
     #################
-    K  = [Kuuj Kupj; Kpuj Kppj]
+    KM = [Kuuj Kupj; Kpuj Kppj]
     f  = [fu; fp]
-    δx = K\f
-
-    # @show (Kppj)
+    δx = KM\f
 
     V.x.v[2:end-1, 2:end-1] .-= δx[Num.x.v[2:end-1, 2:end-1]]
     V.y.v[2:end-1, 2:end-1] .-= δx[Num.y.v[2:end-1, 2:end-1]]
@@ -227,7 +230,7 @@ function Main_2D_DI()
 
 
     DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
-    LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+    LinearMomentumResidual!( R, ∇v, τ, P, P0, β, K, ρ, g, ∂ξ, ∂η, Δ, BC, comp, symmetric )
     # Display residuals
     err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
     err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
@@ -235,22 +238,7 @@ function Main_2D_DI()
     @printf("Rx = %2.9e\n", err_x )
     @printf("Ry = %2.9e\n", err_y )
     @printf("Rp = %2.9e\n", err_p )
-    
-    
-    # display( R.x.v)
 
-    # if err_x<ϵ && err_y<ϵ && err_p<ϵ
-    #     @printf("Converged!\n")
-    #     break
-    # end
-
-    # p=spy(Kuu_SC, c=:RdBu)
-    # p=spy(Kuuj, c=:RdBu)
-    # p=spy(Kpu, c=:RdBu)
-    # p=spy(Kuu.-Kuu', c=:RdBu,  size=(600,600))
-    # @show dropzeros!(Kuuj.-Kuuj')
-    # @show dropzeros!(Kupj.+Kpuj')
-    # display(p)
     cholesky(Kuu_SC)
     @show minimum(R.x.v[2:end-1,2:end-1])
     @show maximum(R.x.v[2:end-1,2:end-1])
@@ -266,9 +254,6 @@ function Main_2D_DI()
     @show maximum(R.p.ex[2:end-1,2:end-1])
     @show minimum(R.p.ey[2:end-1,2:end-1])
     @show maximum(R.p.ey[2:end-1,2:end-1])
-
-    # display(BC.x.v)
-    # display(Num.p.ex)
 
     #########################################
     # if inclusion

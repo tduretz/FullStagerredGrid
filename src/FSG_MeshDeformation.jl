@@ -127,3 +127,25 @@ function ComputeForwardTransformation!( Mesh_x, Mesh_y, ∂x, ∂y, x_ini, y_ini
         @printf("min(∂η∂y) = %1.6f --- max(∂η∂y) = %1.6f\n", minimum(∂η.∂y), maximum(∂η.∂y))
         return nothing
     end
+
+    ##########################################
+    
+    function InverseJacobian2!(∂ξ∂x,∂ξ∂y,∂η∂x,∂η∂y, ∂x∂ξ,∂x∂η,∂y∂ξ,∂y∂η)
+        M = zeros(2,2)
+        @time for i in eachindex(∂ξ∂x)
+            M[1,1]   = ∂x∂ξ[i]
+            M[1,2]   = ∂x∂η[i]
+            M[2,1]   = ∂y∂ξ[i]
+            M[2,2]   = ∂y∂η[i]
+            invJ     = inv(M)
+            ∂ξ∂x[i] = invJ[1,1]
+            ∂ξ∂y[i] = invJ[1,2]
+            ∂η∂x[i] = invJ[2,1]
+            ∂η∂y[i] = invJ[2,2]
+        end
+        @printf("min(∂ξ∂x) = %1.6f --- max(∂ξ∂x) = %1.6f\n", minimum(∂ξ∂x), maximum(∂ξ∂x))
+        @printf("min(∂ξ∂y) = %1.6f --- max(∂ξ∂y) = %1.6f\n", minimum(∂ξ∂y), maximum(∂ξ∂y))
+        @printf("min(∂η∂x) = %1.6f --- max(∂η∂x) = %1.6f\n", minimum(∂η∂x), maximum(∂η∂x))
+        @printf("min(∂η∂y) = %1.6f --- max(∂η∂y) = %1.6f\n", minimum(∂η∂y), maximum(∂η∂y))
+        return nothing
+    end

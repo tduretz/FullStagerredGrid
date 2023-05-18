@@ -18,6 +18,7 @@ function Main_2D_DI()
     y0         = -2*0.
     g          = (x = 0., z=-1.0*0.0)
     inclusion  = true
+    symmetric  = false
     adapt_mesh = true
     solve      = true
     comp       = false
@@ -43,6 +44,7 @@ function Main_2D_DI()
                  xy  = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)) )
     ∇v       = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
     P        = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
+    P0       = (        ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)  )
     D        = ( v11 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
                  v12 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),  
                  v13 = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2,   nc.y+2)),
@@ -61,10 +63,14 @@ function Main_2D_DI()
                  p   = (ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)) ) 
     ρ        = ( (v  = zeros(nv.x+2, nv.y+2), c  = zeros(nc.x+2, nc.y+2)) )
     η        = (  ex = zeros(nc.x+2, nv.y+2), ey = zeros(nv.x+2, nc.y+2)  )
+    K        = (  ex =  ones(nc.x+2, nv.y+2), ey =  ones(nv.x+2, nc.y+2)  )
+    β        = (  ex = zeros(Bool, nc.x+2, nv.y+2), ey = zeros(Bool, nv.x+2, nc.y+2)  )
     BC       = (x = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
                 y = (v  = -1*ones(Int, nv.x+2,   nv.y+2), c  = -1*ones(Int, nc.x+2, nc.y+2) ),
-                p = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)), 
-                ε̇ = (ex = -1*ones(Int, nc.x+2, nv.y+2),     ey = -1*ones(Int, nv.x+2,   nc.y+2)) )
+                p = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2, nc.y+2)), 
+                ε̇ = (ex = -1*ones(Int, nc.x+2, nv.y+2),   ey = -1*ones(Int, nv.x+2, nc.y+2)),
+                C0=zeros(nc.x+2), C1=zeros(nc.x+2), C2=zeros(nc.x+2),
+                D0=zeros(nc.x+2), D1=zeros(nc.x+2), D2=zeros(nc.x+2), ∂h∂x=zeros(nc.x+2) )
     Num      = ( x   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)), 
                  y   = (v  = -1*ones(Int, nv.x,   nv.y), c  = -1*ones(Int, nc.x+2, nc.y+2)),
                  p   = (ex = -1*ones(Int, nc.x+2, nv.y), ey = -1*ones(Int, nv.x,   nc.y+2)) )
@@ -135,7 +141,7 @@ function Main_2D_DI()
     for iter=1:niter
 
         DevStrainRateStressTensor!( ε̇, τ, P, D, ∇v, V, ∂ξ, ∂η, Δ, BC )
-        LinearMomentumResidual!( R, ∇v, τ, P, ρ, g, ∂ξ, ∂η, Δ, BC )
+        LinearMomentumResidual!( R, ∇v, τ, P, P0, β, K, ρ, g, ∂ξ, ∂η, Δ, BC, comp, symmetric )
         # Display residuals
         err_x = max(norm(R.x.v )/length(R.x.v ), norm(R.x.c )/length(R.x.c ))
         err_y = max(norm(R.y.v )/length(R.y.v ), norm(R.y.c )/length(R.y.c ))
@@ -167,15 +173,8 @@ function Main_2D_DI()
         Kup   = ExtendableSparseMatrix(ndofV, ndofP)
         Kpu   = ExtendableSparseMatrix(ndofP, ndofV)
         Kpp   = ExtendableSparseMatrix(ndofP, ndofP)
-        @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
-        # println("Touch Kuu and Kup")
-        # @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Num, BC, D, ∂ξ, ∂η, Δ, nc, nv)
-        # τ.xy.ey'
-        # ε̇.xy.ey'
-        # τ.xx.ey'
-        # R.y.c'
-        # display(Kuu)
-        # Kuu_fact = CholeskyFactorization(Kuu)
+        Kppi  = ExtendableSparseMatrix(ndofP, ndofP)
+        @time AssembleKuuKupKpu!(Kuu, Kup, Kpu, Kpp, Kppi, Num, BC, D, β, K, ∂ξ, ∂η, Δ, nc, nv, penalty, comp, symmetric)
 
         Kuuj = Kuu.cscmatrix
         Kupj = Kup.cscmatrix
