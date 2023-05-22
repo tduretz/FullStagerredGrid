@@ -11,7 +11,7 @@ include("DataStructures.jl")
 include("setup_example.jl")
 
 # Select based upon your local device (:CPU, :CUDA, :AMDGPU, :Metal)
-backend = :CPU
+backend = :CUDA
 
 include("helpers.jl") # will be defined in TinyKernels soon
 
@@ -41,8 +41,8 @@ include("helpers.jl") # will be defined in TinyKernels soon
         ∇v.y[ix,iy]   = ∂Vx∂x + ∂Vy∂y
         ε̇.xx.y[ix,iy] = ∂Vx∂x - 1/3*(∂Vx∂x + ∂Vy∂y)
         ε̇.yy.y[ix,iy] = ∂Vy∂y - 1/3*(∂Vx∂x + ∂Vy∂y)
-        ε̇.xy.y[ix,iy] = (∂Vx∂y + ∂Vy∂x)
-        ε̇.yx.y[ix,iy] = (∂Vx∂y + ∂Vy∂x)
+        ε̇.xy.y[ix,iy] = 1/2*(∂Vx∂y + ∂Vy∂x)
+        ε̇.yx.y[ix,iy] = 1/2*(∂Vx∂y + ∂Vy∂x)
     end
 end
 
@@ -123,7 +123,6 @@ function main(::Type{DAT}; device) where DAT
     ymin, ymax = -3.0, 3.0
     ε̇bg      = -1
     rad      = 0.5
-    ani_fac  = 6.0
     ϵ        = 5e-8      # nonlinear tolerence
     iterMax  = 50000     # max number of iters
     nout     = 1000       # check frequency
@@ -138,7 +137,7 @@ function main(::Type{DAT}; device) where DAT
     τ    = TensorFSG(DAT, device, ncx, ncy)
     ε̇    = TensorFSG(DAT, device, ncx, ncy)
     V    = VectorFSG(DAT, device, ncx, ncy, :nodes, [0.0   0.0  ])
-    N    = VectorFSG(DAT, device, ncx, ncy, :edges, [cosd(30) sind(30)])
+    N    = VectorFSG(DAT, device, ncx, ncy, :edges, [0.707 0.707])
     R    = VectorFSG(DAT, device, ncx, ncy, :nodes, [0.0   0.0  ])
     b    = VectorFSG(DAT, device, ncx, ncy, :nodes, [0.0   0.0  ])
     ∂V∂τ = VectorFSG(DAT, device, ncx, ncy, :nodes, [0.0   0.0  ])
@@ -156,48 +155,14 @@ function main(::Type{DAT}; device) where DAT
     ηx[xv.x.^2 .+ (xc.y').^2 .< rad^2] .= 1.1
     ηy = ones(Float32, ncx, ncy+1)
     ηy[xc.x.^2 .+ (xv.y').^2 .< rad^2] .= 1.1
-    d1 = 2*N.x.x.^2 .* N.y.x.^2
-    d2 = N.x.x .* N.y.x .*(-N.x.x.^2 .+ N.y.x.^2)
-
-    D.d11.x .= to_device(2*ηx .-2*(1 .- 1/ani_fac).*d1.*ηx)
-    D.d12.x .= to_device(       2*(1 .- 1/ani_fac).*d1.*ηx)
-    D.d13.x .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d14.x .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d21.x .= to_device(       2*(1 .- 1/ani_fac).*d1.*ηx)
-    D.d22.x .= to_device(2*ηx .-2*(1 .- 1/ani_fac).*d1.*ηx)
-    D.d23.x .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d24.x .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d31.x .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d32.x .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d33.x .= to_device(1*ηx .+2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηx)
-    D.d34.x .= to_device(       2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηx)
-    D.d41.x .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d42.x .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηx)
-    D.d43.x .= to_device(       2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηx)
-    D.d44.x .= to_device(1*ηx .+2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηx)
-    
-    d1 = 2*N.x.y.^2 .* N.y.y.^2
-    d2 = N.x.y .* N.y.y .*(-N.x.y.^2 .+ N.y.y.^2)
-
-    D.d11.y .= to_device(2*ηy .-2*(1 .- 1/ani_fac).*d1.*ηy)
-    D.d12.y .= to_device(       2*(1 .- 1/ani_fac).*d1.*ηy)
-    D.d13.y .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d14.y .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d21.y .= to_device(       2*(1 .- 1/ani_fac).*d1.*ηy)
-    D.d22.y .= to_device(2*ηy .-2*(1 .- 1/ani_fac).*d1.*ηy)
-    D.d23.y .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d24.y .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d31.y .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d32.y .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d33.y .= to_device(1*ηy .+2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηy)
-    D.d34.y .= to_device(       2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηy)
-    D.d41.y .= to_device(      -2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d42.y .= to_device(       2*(1 .- 1/ani_fac).*d2.*ηy)
-    D.d43.y .= to_device(       2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηy)
-    D.d44.y .= to_device(1*ηy .+2*(1 .- 1/ani_fac).*(d1 .- 0.5).*ηy)
-
-
-
+    D.d11.x .= to_device(2*ηx)
+    D.d22.x .= to_device(2*ηx)
+    D.d33.x .= to_device(2*ηx)
+    D.d44.x .= to_device(2*ηx)
+    D.d11.y .= to_device(2*ηy)
+    D.d22.y .= to_device(2*ηy)
+    D.d33.y .= to_device(2*ηy)
+    D.d44.y .= to_device(2*ηy)
 
     η.x   .= to_device( ηx )
     η.y   .= to_device( ηy )
@@ -209,8 +174,8 @@ function main(::Type{DAT}; device) where DAT
 
 
     θ        = 6/ncx
-    ΔτV      = 0.3*cfl*max(Δ...)^2 ./ maximum(ηx) / 100
-    ΔτP      = 1*cfl*minimum(ηx/ani_fac)*min(Δ...)/2 /100
+    ΔτV      = 0.3*cfl*max(Δ...)^2 ./ maximum(ηx)
+    ΔτP      = 1*cfl*minimum(ηx)*min(Δ...)/2
 
     kernel_StrainRates!    = StrainRates!(device)
     kernel_Stress!         = Stress!(device)
@@ -220,11 +185,12 @@ function main(::Type{DAT}; device) where DAT
     TinyKernels.device_synchronize(get_device())
 
     for iter=1:20000
-        kernel_StrainRates!(ε̇, ∇v, V, Δ; ndrange=(ncx+2,ncy+2))
-        kernel_Stress!(τ, D, ε̇; ndrange=(ncx+2,ncy+2))
-        kernel_Residuals!(R, τ, P, b, Δ; ndrange=(ncx+2,ncy+2))
-        kernel_RateUpdate!(∂V∂τ, ∂P∂τ, R, ∇v, θ; ndrange=(ncx+2,ncy+2))
-        kernel_SolutionUpdate!(V, P, ∂V∂τ, ∂P∂τ, ΔτV, ΔτP; ndrange=(ncx+2,ncy+2))
+        
+        wait(kernel_StrainRates!(ε̇, ∇v, V, Δ; ndrange=(ncx+2,ncy+2)))
+        wait(kernel_Stress!(τ, D, ε̇; ndrange=(ncx+2,ncy+2)))
+        wait(kernel_Residuals!(R, τ, P, b, Δ; ndrange=(ncx+2,ncy+2)))
+        wait(kernel_RateUpdate!(∂V∂τ, ∂P∂τ, R, ∇v, θ; ndrange=(ncx+2,ncy+2)))
+        wait(kernel_SolutionUpdate!(V, P, ∂V∂τ, ∂P∂τ, ΔτV, ΔτP; ndrange=(ncx+2,ncy+2)))
         if iter==1 || mod(iter,100)==0
             errx = (; c = mean(abs.(R.x.c)), v = mean(abs.(R.x.v)) )
             erry = (; c = mean(abs.(R.y.c)), v = mean(abs.(R.y.v)) ) 
