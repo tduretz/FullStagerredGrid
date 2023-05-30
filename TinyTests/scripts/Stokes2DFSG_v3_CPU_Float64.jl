@@ -13,6 +13,7 @@ end
 @views ∂_∂ξ(aE, aW, Δ) = (aE - aW) / Δ.x
 @views ∂_∂η(aN, aS, Δ) = (aN - aS) / Δ.y
 
+# add gravity
 # add coordinate transformation
 # ix --> i, iy -->j
 # Introduce local time stepping
@@ -38,9 +39,9 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax; cmap = :turbo
     Axis(f[1,1])
     min_v = minimum( sol.p ); max_v = maximum( sol.p )
 
-    limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
-    poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
+    # poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # Axis(f[2,1], aspect = ar)
     # min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
@@ -49,10 +50,10 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax; cmap = :turbo
     # poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # Axis(f[2,2], aspect = ar)
-    # min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
-    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    # poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
+    limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
     
     # scatter!(x1,y1, color=:white)
     # scatter!(x2,y2, color=:white, marker=:xcross)
@@ -136,7 +137,7 @@ end
         ∂P∂x       = ∂P∂ξ   * ∂ξ∂x + ∂P∂η   * ∂η∂x
         ∂P∂y       = ∂P∂ξ   * ∂ξ∂y + ∂P∂η   * ∂η∂y 
         R.x.v[i,j] = ∂τxx∂x + ∂τyx∂y - ∂P∂x
-        R.y.v[i,j] = ∂τyy∂y + ∂τxy∂x - ∂P∂y
+        R.y.v[i,j] = ∂τyy∂y + ∂τxy∂x - ∂P∂y + b.y.v[i,j]
     end
     @inbounds if i>1 && j>1 && i<size(R.x.c,1) && j<size(R.x.c,2)
         ∂ξ∂x = ∂.ξ.∂x.c[i,j]; ∂ξ∂y = ∂.ξ.∂y.c[i,j]; ∂η∂x = ∂.η.∂x.c[i,j]; ∂η∂y = ∂.η.∂y.c[i,j];
@@ -150,12 +151,12 @@ end
         ∂P∂η       = ∂_∂η(P.y[i-1,j],    P.y[i-1,j-1],    Δ)
         ∂τxx∂x     = ∂τxx∂ξ * ∂ξ∂x + ∂τxx∂η * ∂η∂x
         ∂τyy∂y     = ∂τyy∂ξ * ∂ξ∂y + ∂τyy∂η * ∂η∂y 
-        ∂τyx∂y     = ∂τxy∂ξ * ∂ξ∂y + ∂τyx∂η * ∂η∂y            # assume τyx = τxy
-        ∂τxy∂x     = ∂τxy∂ξ * ∂ξ∂x + ∂τyx∂η * ∂η∂x            # assume τyx = τxy
+        ∂τyx∂y     = ∂τxy∂ξ * ∂ξ∂y + ∂τyx∂η * ∂η∂y            # ⚠ assume τyx = τxy !!
+        ∂τxy∂x     = ∂τxy∂ξ * ∂ξ∂x + ∂τyx∂η * ∂η∂x            # ⚠ assume τyx = τxy !!
         ∂P∂x       = ∂P∂ξ   * ∂ξ∂x + ∂P∂η   * ∂η∂x
         ∂P∂y       = ∂P∂ξ   * ∂ξ∂y + ∂P∂η   * ∂η∂y 
-        R.x.c[i,j] = ∂τxx∂x + ∂τyx∂y - ∂P∂x
-        R.y.c[i,j] = ∂τyy∂y + ∂τxy∂x - ∂P∂y
+        R.x.c[i,j] = ∂τxx∂x + ∂τyx∂y - ∂P∂x  
+        R.y.c[i,j] = ∂τyy∂y + ∂τxy∂x - ∂P∂y + b.y.c[i,j]
     end
 end
 
@@ -337,16 +338,18 @@ function main(::Type{DAT}; device) where DAT
     ncx, ncy   = n*120-2, n*120-2
     xmin, xmax = -3.0, 3.0
     ymin, ymax = -3.0, 3.0
-    ε̇bg        = -1
+    ε̇bg        = -1*0
     rad        = 0.5
     ϵ          = 5e-8      # nonlinear tolerence
     itmax      = 20000     # max number of iters
     errx0      = (1. , 1.0)
     nout       = 500       # check frequency
     θ          = 3.0/ncx
-    η_inc      = 1e3
+    η_inc      = 1.
+    ρ_inc      = 2.
+    g          = -1.0
     adapt_mesh = true
-    adapt_mesh = false
+    # adapt_mesh = false
 
     if adapt_mesh
         cflV       = 0.25/4
@@ -357,6 +360,7 @@ function main(::Type{DAT}; device) where DAT
     end
 
     η    = ScalarFSG(DAT, device, :XY, ncx, ncy)
+    ρ    = ScalarFSG(DAT, device, :CV, ncx, ncy)
     P    = ScalarFSG(DAT, device, :XY, ncx, ncy)
     ΔτP  = ScalarFSG(DAT, device, :XY, ncx, ncy)
     ΔτV  = ScalarFSG(DAT, device, :CV, ncx, ncy)
@@ -439,7 +443,18 @@ function main(::Type{DAT}; device) where DAT
     end
 
     X = (v=(x=xv4[2:2:end-1,2:2:end-1], y=yv4[2:2:end-1,2:2:end-1]), c=(x=xv4[1:2:end-0,1:2:end-0], y=yv4[1:2:end-0,1:2:end-0]), x=(x=xv4[2:2:end-1,3:2:end-2], y=yv4[2:2:end-1,3:2:end-2]), y=(x=xv4[3:2:end-2,2:2:end-1], y=yv4[3:2:end-2,2:2:end-1]))
+    
+    ########### Buoyancy
+    ρv = ones(DAT, ncx+1, ncy+1)
+    ρv[X.v.x.^2 .+ X.v.y.^2 .< rad^2] .= ρ_inc
 
+    ρc = ones(DAT, ncx+2, ncy+2)
+    ρc[X.c.x.^2 .+ X.c.y.^2 .< rad^2] .= ρ_inc
+
+    b.y.v   .= to_device( ρv*g )
+    b.y.c   .= to_device( ρc*g )
+
+    ########### Viscosity
     ηv = ones(DAT, ncx+1, ncy+1)
     ηv[X.v.x.^2 .+ X.v.y.^2 .< rad^2] .= η_inc
   
@@ -513,7 +528,7 @@ function main(::Type{DAT}; device) where DAT
             @printf("Ry = %2.2e %2.2e\n", erry.c, erry.v)
             @printf("Rp = %2.2e %2.2e\n", errp.x, errp.y)
             if isnan(maximum(errx)) error("NaN à l'ail!") end
-            if (maximum(errx)>1e3*maximum(errx0)) error("Stop before explosion!") end
+            # if (maximum(errx)>1e3*maximum(errx0)) error("Stop before explosion!") end
             if maximum(errx) < ϵ && maximum(erry) < ϵ && maximum(errp) < ϵ
                 break
             end
@@ -525,8 +540,6 @@ function main(::Type{DAT}; device) where DAT
     vertx = [  X.v.x[1:end-1,1:end-1][:]  X.v.x[2:end-0,1:end-1][:]  X.v.x[2:end-0,2:end-0][:]  X.v.x[1:end-1,2:end-0][:] ] 
     verty = [  X.v.y[1:end-1,1:end-1][:]  X.v.y[2:end-0,1:end-1][:]  X.v.y[2:end-0,2:end-0][:]  X.v.y[1:end-1,2:end-0][:] ] 
     sol   = ( vx=to_host(V.x.c[2:end-1,2:end-1][:]), vy=to_host(V.y.c[2:end-1,2:end-1][:]), p=avWESN(to_host(P.x), to_host(P.y))[:], η=avWESN(to_host(η.x), to_host(η.y))[:])
-    # xc2   = ∂η∂xvWESN(xc2_1, xc2_2[:,1:end-1])[:] 
-    # yc2   = ∂η∂xvWESN(yc2_1, yc2_2[:,1:end-1])[:]
     PatchPlotMakie(vertx, verty, sol, minimum(X.v.x), maximum(X.v.x), minimum(X.v.y), maximum(X.v.y), write_fig=false)
      
     # Lx, Ly = xmax-xmin, ymax-ymin
