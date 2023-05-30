@@ -110,7 +110,7 @@ end
 ###############################
 
 function main(::Type{DAT}; device) where DAT
-    n = 4
+    n = 1
     ncx, ncy = n*120-2, n*120-2
     xmin, xmax = -3.0f0, 3.0f0
     ymin, ymax = -3.0f0, 3.0f0
@@ -165,11 +165,11 @@ function main(::Type{DAT}; device) where DAT
     TinyKernels.device_synchronize(get_device())
 
     for iter=1:20000
-        kernel_StrainRates!(ε̇, ∇v, V, Δ; ndrange=(ncx+2,ncy+2))
-        kernel_Stress!(τ, η, ε̇; ndrange=(ncx+2,ncy+2))
-        kernel_Residuals!(R, τ, P, b, Δ; ndrange=(ncx+2,ncy+2))
-        kernel_RateUpdate!(∂V∂τ, ∂P∂τ, R, ∇v, θ; ndrange=(ncx+2,ncy+2))
-        kernel_SolutionUpdate!(V, P, ∂V∂τ, ∂P∂τ, ΔτV, ΔτP; ndrange=(ncx+2,ncy+2))
+        wait( kernel_StrainRates!(ε̇, ∇v, V, Δ; ndrange=(ncx+2,ncy+2)))
+        wait( kernel_Stress!(τ, η, ε̇; ndrange=(ncx+2,ncy+2)))
+        wait( kernel_Residuals!(R, τ, P, b, Δ; ndrange=(ncx+2,ncy+2)))
+        wait( kernel_RateUpdate!(∂V∂τ, ∂P∂τ, R, ∇v, θ; ndrange=(ncx+2,ncy+2)))
+        wait( kernel_SolutionUpdate!(V, P, ∂V∂τ, ∂P∂τ, ΔτV, ΔτP; ndrange=(ncx+2,ncy+2)))
         if iter==1 || mod(iter,100)==0
             errx = (; c = mean(abs.(R.x.c)), v = mean(abs.(R.x.v)) )
             erry = (; c = mean(abs.(R.y.c)), v = mean(abs.(R.y.v)) ) 
@@ -223,4 +223,4 @@ function main(::Type{DAT}; device) where DAT
 
 end
 
-main(eletype; device)
+main(Float32; device)

@@ -1,0 +1,126 @@
+# example triad 2D kernel
+using  GLMakie, Printf
+import LinearAlgebra: norm
+import Statistics: mean
+@views av1D(x) = 0.5.*(x[2:end] .+ x[1:end-1])
+@views av2D_x(x) = 0.5.*(x[2:end,:] .+ x[1:end-1,:])
+@views av2D_y(x) = 0.5.*(x[:,2:end] .+ x[:,1:end-1])
+@views inn(x)    = x[2:end-1,2:end-1]
+###############################
+
+function main_PlainJulia(::Type{DAT}) where DAT
+    n = 2
+    ncx, ncy = n*120-2, n*120-2
+    xmin, xmax = -3.0, 3.0
+    ymin, ymax = -3.0, 3.0
+    ε̇bg      = -1
+    rad      = 0.5
+    ϵ        = 5e-4      # nonlinear tolerence
+    iterMax  = 50000     # max number of iters
+    nout     = 1000       # check frequency
+    cfl      = 0.42
+
+    # Allocate + initialise
+    T     = zeros(DAT,  ncx+2, ncy+2); fill!(T, DAT(0.0))
+    Ti    = zeros(DAT,  ncx+2, ncy+2); fill!(T, DAT(0.0))
+    k     = zeros(DAT,  ncx+1, ncy+1); fill!(k, DAT(0.0))
+    q     = (x=zeros(DAT,  ncx+1, ncy+0), y   = zeros(DAT,  ncx+0, ncy+1)); ; fill!(q.x, DAT(0.0)); ; fill!(q.y, DAT(0.0))
+    b     = zeros(DAT,  ncx+0, ncy+0); fill!(b, DAT(0.0))
+    RT    = zeros(DAT,  ncx+0, ncy+0); fill!(RT, DAT(0.0))
+    Rθ    = zeros(DAT,  ncx+0, ncy+0); fill!(RT, DAT(0.0))
+    ∂T∂τ  = zeros(DAT,  ncx+0, ncy+0); fill!(∂T∂τ, DAT(0.0))
+    ∂T∂τ0 = zeros(DAT,  ncx+0, ncy+0); fill!(∂T∂τ, DAT(0.0))
+
+    # Preprocessing
+    Δ   = (; x =(xmax-xmin)/ncx, y =(ymax-ymin)/ncy)
+    xce = (; x=LinRange(xmin-Δ.x/2, xmax+Δ.x/2, ncx+2), y=LinRange(ymin-Δ.y/2, ymax+Δ.y/2, ncy+2) ) 
+    xv  = (; x=av1D(xce.x), y=av1D(xce.y) )
+    xc  = (; x=av1D(xv.x),  y=av1D(xv.y) ) 
+
+    # Model configuration
+    k .= 1.
+    b .= 1.
+    k[(xv.x).^2 .+ (xv.y').^2 .< rad^2] .= 1.1
+    b[(xc.x).^2 .+ (xc.y').^2 .< rad^2] .= 2.
+    T .= -ε̇bg*xce.x .+ 0*xce.y'
+    
+    # PT params
+    θ        = 4.3/ncx
+    Δτ       = cfl*max(Δ...)^2 ./ maximum(k)  
+
+
+    nl  = 10
+    f   = zeros(nl)
+    t   = zeros(nl)
+    t   .= LinRange(θ-0.1*θ, θ+0.1*θ, nl)
+    θ0  = θ
+    o   = 0
+
+    for iter=1:5000
+        ∂T∂τ0  .=  ∂T∂τ
+        q.x    .= -av2D_y(k).*diff(T[:,2:end-1], dims=1)/Δ.x
+        q.y    .= -av2D_x(k).*diff(T[2:end-1,:], dims=2)/Δ.y
+        RT     .= b .- diff(q.x, dims=1)/Δ.x .- diff(q.y, dims=2)/Δ.y
+        
+        if iter==1 || mod(iter, 100)==0
+            f      .= 0.0 
+            # t      .= LinRange(θ-0.1*θ, θ+0.1*θ, nl)
+            for i in eachindex(t)
+                ∂T∂τ .= (1.0-θ).*∂T∂τ0 .+ RT
+                Rθ   .= ∂T∂τ .- (1.0-t[i]).*∂T∂τ0 .- RT
+                f[i] = mean(abs.(Rθ))
+            end 
+            _, imin = findmin(f)
+            θ = t[imin]
+        end
+
+        # if iter==1 || mod(iter, 100)==0
+        #     Ti .= T
+        #     f      .= 0.0 
+        #     t      .= LinRange(θ-0.2*θ, θ+0.2*θ, nl)
+        #     for i in eachindex(t)
+        #         T .= Ti
+        #         ∂T∂τ   .= (1.0-θ).*∂T∂τ0 .+ RT
+        #         inn(T) .= inn(Ti) .- 0.5*Δτ.*∂T∂τ
+        #         q.x    .= -av2D_y(k).*diff(T[:,2:end-1], dims=1)/Δ.x
+        #         q.y    .= -av2D_x(k).*diff(T[2:end-1,:], dims=2)/Δ.y
+        #         RT     .= b .- diff(q.x, dims=1)/Δ.x .- diff(q.y, dims=2)/Δ.y
+        #         f[i] = mean(abs.(RT))
+        #     end 
+        #     _, imin = findmin(f)
+        #     θ = t[imin]
+        #     T .= Ti
+        # end
+        
+
+        ∂T∂τ   .= (1.0-θ).*∂T∂τ0 .+ RT
+        Rθ     .= ∂T∂τ .- (1.0-θ).*∂T∂τ0 .- RT
+        inn(T) .+= Δτ.*∂T∂τ
+        
+        if iter==1 || mod(iter,100)==0
+            errT = mean(abs.(RT))
+            errθ = mean(abs.(Rθ))
+            @printf("It. %06d --- RT = %2.2e --- Rθ = %2.2e --- %2.2e %2.2e\n", iter, errT, errθ, θ0, θ)
+            if isnan(errT) error("NaN à l'ail!") end
+            if maximum(errT) < ϵ break end
+        end
+    end
+
+    @show collect(t)
+    @show collect(f)
+
+    Lx, Ly = xmax-xmin, ymax-ymin
+    f = Figure(resolution = ( Lx/Ly*600,600), fontsize=25, aspect = 2.0)
+    ax1 = Axis(f[1, 1], title = L"$k$", xlabel = "x [km]", ylabel = "y [km]")
+    # hm = heatmap!(ax1,  xc.x,  xv.y, (k), colormap = (:turbo, 0.85))
+    # hm = heatmap!(ax1, xc.x, xc.y, (RT), colormap = (:turbo, 0.85))
+    # hm = heatmap!(ax1, xc.x, xv.y, (q.y), colormap = (:turbo, 0.85))
+    hm = heatmap!(ax1, xce.x, xce.y, (T), colormap = (:turbo, 0.85))
+    colsize!(f.layout, 1, Aspect(1, Lx/Ly))
+    GLMakie.Colorbar(f[1, 2], hm, label = "τII", width = 20, labelsize = 25, ticklabelsize = 14 )
+    GLMakie.colgap!(f.layout, 20)
+    DataInspector(f)
+    display(f)
+end
+
+main_PlainJulia(Float64)

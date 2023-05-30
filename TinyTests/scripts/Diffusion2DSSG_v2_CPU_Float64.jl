@@ -33,7 +33,7 @@ include("helpers.jl") # will be defined in TinyKernels soon
     end
 end
 
-@tiny function Balance!(RT, b, q, Δ)
+@tiny function Balance!(RT, Rθ, b, q, Δ)
     ix, iy = @indices
     @inline isin(A) = checkbounds(Bool, A, ix, iy)
      if isin(RT)
@@ -41,27 +41,24 @@ end
     end
 end
 
-@tiny function RateUpdate!(∂T∂τ, RT, θ)
+@tiny function Updates!(T, ∂T∂τ, RT, Rθ, Δτ, θ)
     ix, iy = @indices
     @inline isin(A) = checkbounds(Bool, A, ix, iy)
- if isin(∂T∂τ)
+    if isin(∂T∂τ)
+        ∂T∂τ0       = ∂T∂τ[ix,iy]
         ∂T∂τ[ix,iy] = (1-θ)* ∂T∂τ[ix,iy] + RT[ix,iy]
+        Rθ[ix,iy]   = (∂T∂τ[ix,iy] - (1-θ)* ∂T∂τ0) - RT[ix,iy]
     end
-end
-
-@tiny function SolutionUpdate!(T, ∂T∂τ, Δτ)
-    ix, iy = @indices
     if ix>1 && iy>1 && ix<size(T,1) && iy<size(T,2)
-        T[ix,iy] += Δτ * ∂T∂τ[ix-1,iy-1]
+        T[ix,iy]   += Δτ * ∂T∂τ[ix-1,iy-1]
     end
 end
-
 
 ###############################
 
 function main(::Type{DAT}; device) where DAT
     n = 1
-    ncx, ncy = n*120-2, n*120-2
+    ncx, ncy = n*60-2, n*60-2
     xmin, xmax = -3.0, 3.0
     ymin, ymax = -3.0, 3.0
     ε̇bg      = -1
@@ -69,10 +66,7 @@ function main(::Type{DAT}; device) where DAT
     ϵ        = 5e-4      # nonlinear tolerence
     iterMax  = 50000     # max number of iters
     nout     = 1000       # check frequency
-    Reopt    = 0.625*π*2
     cfl      = 0.42
-    ρ        = cfl*Reopt/ncx
-    nsm      = 4
 
     # Allocate + initialise
     T    = device_array(DAT, device, ncx+2, ncy+2); fill!(T, DAT(0.0))
@@ -80,6 +74,7 @@ function main(::Type{DAT}; device) where DAT
     q    = (x=device_array(DAT, device, ncx+1, ncy+0), y   = device_array(DAT, device, ncx+0, ncy+1)); ; fill!(q.x, DAT(0.0)); ; fill!(q.y, DAT(0.0))
     b    = device_array(DAT, device, ncx+0, ncy+0); fill!(b, DAT(0.0))
     RT   = device_array(DAT, device, ncx+0, ncy+0); fill!(RT, DAT(0.0))
+    Rθ   = device_array(DAT, device, ncx+0, ncy+0); fill!(RT, DAT(0.0))
     ∂T∂τ = device_array(DAT, device, ncx+0, ncy+0); fill!(∂T∂τ, DAT(0.0))
 
     # Preprocessing
@@ -88,47 +83,60 @@ function main(::Type{DAT}; device) where DAT
     xv  = (; x=av1D(xce.x), y=av1D(xce.y) )
     xc  = (; x=av1D(xv.x),  y=av1D(xv.y) ) 
 
+    # # Model configuration
+    # k1  = ones(ncx+1, ncy+1)
+    # k1[xv.x.^2 .+ (xv.y').^2 .< rad^2] .= 1.1  # shift of inclusion does not impact θ 
+    # k  .= to_device(k1)
+    # b1  = ones(ncx+0, ncy+0)
+    # b1[xc.x.^2 .+ (xc.y').^2 .< rad^2] .= 2.
+    # b  .= to_device(b1)
+    # T1  = ones(ncx+2, ncy+2)
+    # T1 .= -ε̇bg*xce.x .+ 0*xce.y'
+    # T  .= to_device(T1)
+
+    # # PT params
+    # θ        = 4.3/ncx
+    # Δτ       = cfl*max(Δ...)^2 ./ maximum(k) 
+
     # Model configuration
     k1  = ones(ncx+1, ncy+1)
-    k1[xv.x.^2 .+ (xv.y').^2 .< rad^2] .= 1.1
+    k1[(xv.x).^2 .+ (xv.y').^2 .< rad^2] .= 1.1
     k  .= to_device(k1)
     b1  = ones(ncx+0, ncy+0)
-    b1[xc.x.^2 .+ (xc.y').^2 .< rad^2] .= 2.
+    b1[(xc.x.-3.).^2 .+ (xc.y'.-2.).^2 .< rad^2] .= 2.
     b  .= to_device(b1)
     T1  = ones(ncx+2, ncy+2)
-    T1 .= -ε̇bg*xce.x .+ 0*xce.y'
+    T1 .= -20*ε̇bg*xce.x .+ 20*xce.y'
     T  .= to_device(T1)
-
+    
     # PT params
-    θ        = 4.3/ncx
+    θ = 5.3/ncx
     Δτ       = cfl*max(Δ...)^2 ./ maximum(k) 
 
     kernel_Flux!           = Flux!(device)
     kernel_Balance!        = Balance!(device)
-    kernel_RateUpdate!     = RateUpdate!(device)
-    kernel_SolutionUpdate! = SolutionUpdate!(device)
+    kernel_Updates!        = Updates!(device)
     TinyKernels.device_synchronize(get_device())
 
-    for iter=1:1
+    for iter=1:10000
         wait( kernel_Flux!(q, k, T, Δ; ndrange=(ncx+2,ncy+2)) )
-        wait( kernel_Balance!(RT, b, q, Δ; ndrange=(ncx+2,ncy+2)) )
-        wait( kernel_RateUpdate!(∂T∂τ, RT, θ; ndrange=(ncx+2,ncy+2)) )
-        wait( kernel_SolutionUpdate!(T, ∂T∂τ, Δτ; ndrange=(ncx+2,ncy+2)) )
+        wait( kernel_Balance!(RT, Rθ, b, q, Δ; ndrange=(ncx+2,ncy+2)) )
+        wait( kernel_Updates!(T, ∂T∂τ, RT, Rθ, Δτ, θ; ndrange=(ncx+2,ncy+2)) )
         if iter==1 || mod(iter,100)==0
-            err = mean(abs.(RT))
-            @printf("It. %06d --- R = %2.2e\n", iter, err)
-            if isnan(err) error("NaN à l'ail!") end
-            if maximum(err) < ϵ break end
+            errT = mean(abs.(RT))
+            errθ = mean(abs.(Rθ))
+            @printf("It. %06d --- RT = %2.2e --- Rθ = %2.2e\n", iter, errT, errθ)
+            if isnan(errT) error("NaN à l'ail!") end
+            if maximum(errT) < ϵ break end
         end
     end
 
     Lx, Ly = xmax-xmin, ymax-ymin
     f = Figure(resolution = ( Lx/Ly*600,600), fontsize=25, aspect = 2.0)
     ax1 = Axis(f[1, 1], title = L"$k$", xlabel = "x [km]", ylabel = "y [km]")
-    # hm = heatmap!(ax1,  xc.x,  xv.y, to_host(k), colormap = (:turbo, 0.85))
-    hm = heatmap!(ax1, xce.x, xce.y, to_host(T), colormap = (:turbo, 0.85))
-    # hm = heatmap!(ax1, xc.x, xc.y, to_host(RT), colormap = (:turbo, 0.85))
-    # hm = heatmap!(ax1, xc.x, xv.y, to_host(q.y), colormap = (:turbo, 0.85))
+    hm = heatmap!(ax1,  xc.x,  xv.y, to_host(k), colormap = (:turbo, 0.85))
+    # hm = heatmap!(ax1, xce.x, xce.y, to_host(θ), colormap = (:turbo, 0.85))
+    hm = heatmap!(ax1, xc.x, xc.y, to_host(RT), colormap = (:turbo, 0.85))
     colsize!(f.layout, 1, Aspect(1, Lx/Ly))
     GLMakie.Colorbar(f[1, 2], hm, label = "τII", width = 20, labelsize = 25, ticklabelsize = 14 )
     GLMakie.colgap!(f.layout, 20)

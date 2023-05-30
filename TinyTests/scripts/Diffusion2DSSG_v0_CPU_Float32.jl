@@ -9,7 +9,7 @@ import Statistics: mean
 include("setup_example.jl")
 
 # Select based upon your local device (:CPU, :CUDA, :AMDGPU, :Metal)
-backend = :CPU
+backend = :Metal
 
 include("helpers.jl") # will be defined in TinyKernels soon
 
@@ -60,13 +60,15 @@ end
 ###############################
 
 function main(::Type{DAT}; device) where DAT
-    n = 1
+    n = 2
     ncx, ncy = n*120-2, n*120-2
     xmin, xmax = -3.0f0, 3.0f0
     ymin, ymax = -3.0f0, 3.0f0
     ε̇bg      = -1f0
     rad      = 0.5f0
     ϵ        = 5e-4      # nonlinear tolerence
+    err      = 0.
+    err0     = 0.
     iterMax  = 50000     # max number of iters
     nout     = 1000       # check frequency
     Reopt    = 0.625*π*2f0
@@ -115,8 +117,10 @@ function main(::Type{DAT}; device) where DAT
         wait( kernel_RateUpdate!(∂T∂τ, RT, θ; ndrange=(ncx+2,ncy+2)) )
         wait( kernel_SolutionUpdate!(T, ∂T∂τ, Δτ; ndrange=(ncx+2,ncy+2)) )
         if iter==1 || mod(iter,100)==0
-            err = mean(abs.(RT))
-            @printf("It. %06d --- R = %2.2e\n", iter, err)
+            # err = mean(abs.(RT))
+            err = norm(RT)/sqrt(length(RT))
+            if iter==1 err0 = err end
+            @printf("It. %06d --- R = %2.2e --- R/R0 = %2.2e\n", iter, err, err/err0)
             if isnan(err) error("NaN à l'ail!") end
             if maximum(err) < ϵ break end
         end

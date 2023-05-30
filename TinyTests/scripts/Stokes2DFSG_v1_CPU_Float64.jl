@@ -4,11 +4,16 @@ import LinearAlgebra: norm
 import Statistics: mean
 Makie.inline!(false)
 
+@views function maxloc!(A2, A)
+    A2[2:end-1,2:end-1] .= max.(max.(max.(A[1:end-2,2:end-1], A[3:end,2:end-1]), A[2:end-1,2:end-1]), max.(A[2:end-1,1:end-2], A[2:end-1,3:end]))
+    A2[[1,end],:] .= A2[[2,end-1],:]; A2[:,[1,end]] .= A2[:,[2,end-1]]
+end
 @views av1D(x) = 0.5.*(x[2:end] .+ x[1:end-1])
 
+# Introduce local time stepping
 # PERFECT SCALING ON CPU AND FLOAT64!
 
-include("DataStructures.jl")
+include("DataStructures_v2.jl")
 include("setup_example.jl")
 
 # Select based upon your local device (:CPU, :CUDA, :AMDGPU, :Metal)
@@ -94,19 +99,19 @@ end
 @tiny function SolutionUpdate!(V, P, ∂V∂τ, ∂P∂τ, ΔτV, ΔτP)
     ix, iy = @indices
     @inbounds if ix>1 && iy>1 && ix<size(V.x.v,1) && iy<size(V.x.v,2)
-        V.x.v[ix,iy] += ΔτV * ∂V∂τ.x.v[ix,iy]
-        V.y.v[ix,iy] += ΔτV * ∂V∂τ.y.v[ix,iy]
+        V.x.v[ix,iy] += ΔτV.v[ix,iy] * ∂V∂τ.x.v[ix,iy]
+        V.y.v[ix,iy] += ΔτV.v[ix,iy] * ∂V∂τ.y.v[ix,iy]
     end 
     @inbounds if ix>1 && iy>1 && ix<size(V.x.c,1) && iy<size(V.x.c,2)
-        V.x.c[ix,iy] += ΔτV * ∂V∂τ.x.c[ix,iy]
-        V.y.c[ix,iy] += ΔτV * ∂V∂τ.y.c[ix,iy]
+        V.x.c[ix,iy] += ΔτV.c[ix,iy] * ∂V∂τ.x.c[ix,iy]
+        V.y.c[ix,iy] += ΔτV.c[ix,iy] * ∂V∂τ.y.c[ix,iy]
     end
     @inline isin(A) = checkbounds(Bool, A, ix, iy)
     @inbounds if isin(P.x)
-        P.x[ix,iy] += ΔτP * ∂P∂τ.x[ix,iy]
+        P.x[ix,iy] += ΔτP.x[ix,iy] * ∂P∂τ.x[ix,iy]
     end
     @inbounds if isin(P.y)
-        P.y[ix,iy] += ΔτP * ∂P∂τ.y[ix,iy]
+        P.y[ix,iy] += ΔτP.y[ix,iy] * ∂P∂τ.y[ix,iy]
     end
 end
 
@@ -114,30 +119,31 @@ end
 ###############################
 
 function main(::Type{DAT}; device) where DAT
-    n = 1
-    ncx, ncy = n*120-2, n*120-2
+    n          = 1
+    ncx, ncy   = n*120-2, n*120-2
     xmin, xmax = -3.0, 3.0
     ymin, ymax = -3.0, 3.0
-    ε̇bg      = -1
-    rad      = 0.5
-    ϵ        = 5e-8      # nonlinear tolerence
-    itmax    = 20000     # max number of iters
-    nout     = 1000       # check frequency
-    # Reopt    = 0.625*π*2
-    cfl      = 1.0/1.3
-    # ρ        = cfl*Reopt/ncx
-    # nsm      = 4
+    ε̇bg        = -1
+    rad        = 0.5
+    ϵ          = 5e-8      # nonlinear tolerence
+    itmax      = 20000     # max number of iters
+    nout       = 500       # check frequency
+    cflV       = 0.25
+    cflP       = 1.0
+    θ          = 3.0/ncx
 
-    η    = ScalarFSG(DAT, device, ncx, ncy)
-    P    = ScalarFSG(DAT, device, ncx, ncy)
-    ∇v   = ScalarFSG(DAT, device, ncx, ncy)
+    η    = ScalarFSG(DAT, device, :XY, ncx, ncy)
+    P    = ScalarFSG(DAT, device, :XY, ncx, ncy)
+    ΔτP  = ScalarFSG(DAT, device, :XY, ncx, ncy)
+    ΔτV  = ScalarFSG(DAT, device, :CV, ncx, ncy)
+    ∇v   = ScalarFSG(DAT, device, :XY, ncx, ncy)
     τ    = TensorFSG(DAT, device, ncx, ncy)
     ε̇    = TensorFSG(DAT, device, ncx, ncy)
     V    = VectorFSG(DAT, device, ncx, ncy)
     R    = VectorFSG(DAT, device, ncx, ncy)
     b    = VectorFSG(DAT, device, ncx, ncy)
     ∂V∂τ = VectorFSG(DAT, device, ncx, ncy)
-    ∂P∂τ = ScalarFSG(DAT, device, ncx, ncy)
+    ∂P∂τ = ScalarFSG(DAT, device, :XY, ncx, ncy)
 
     # Preprocessing
     Δ   = (; x =(xmax-xmin)/ncx, y =(ymax-ymin)/ncy)
@@ -146,7 +152,7 @@ function main(::Type{DAT}; device) where DAT
     xc  = (; x=av1D(xv.x),  y=av1D(xv.y) ) 
 
     ηv = ones(DAT, ncx+1, ncy+1)
-    ηv[xv.x.^2 .+ (xv.y').^2 .< rad^2] .= 1e2
+    ηv[xv.x.^2 .+ (xv.y').^2 .< rad^2] .= 1e3
     # Arithmetic
     # ηx = 0.5 .* (ηv[:,1:end-1] .+ ηv[:,2:end-0]) # this gives cleanest inclusion pressure
     # ηy = 0.5 .* (ηv[1:end-1,:] .+ ηv[2:end-0,:])
@@ -158,7 +164,7 @@ function main(::Type{DAT}; device) where DAT
     # ηy = sqrt.(ηv[1:end-1,:] .* ηv[2:end-0,:])
   
     ηc = ones(DAT, ncx+2, ncy+2)
-    ηc[xce.x.^2 .+ (xce.y').^2 .< rad^2] .= 1e2
+    ηc[xce.x.^2 .+ (xce.y').^2 .< rad^2] .= 1e3
     # Arithmetic
     ηx = 0.5 .* (ηc[1:end-1,2:end-1] .+ ηc[2:end-0,2:end-1])
     ηy = 0.5 .* (ηc[2:end-1,1:end-1] .+ ηc[2:end-1,2:end-0])
@@ -175,6 +181,17 @@ function main(::Type{DAT}; device) where DAT
     # ηy = ones(Float32, ncx, ncy+1)
     # ηy[xc.x.^2 .+ (xv.y').^2 .< rad^2] .= 1e2
 
+    # Maxloc business
+    ηx2 = copy(ηx)
+    maxloc!(ηx2, ηx)
+    ηy2 = copy(ηy)
+    maxloc!(ηy2, ηy)
+    ηc2 = copy(ηc)
+    maxloc!(ηc2, ηc)
+    ηv2 = copy(ηv)
+    maxloc!(ηv2, ηv)
+
+    # Viscosity field
     η.x   .= to_device( ηx )
     η.y   .= to_device( ηy )
     PS     = 1
@@ -183,9 +200,12 @@ function main(::Type{DAT}; device) where DAT
     V.y.c .= to_device( -  0*xce.x    .+ ε̇bg*xce.y'*PS )
     V.y.v .= to_device( -  0* xv.x    .+ ε̇bg* xv.y'*PS )
 
-    θ        = 3.0/ncx
-    ΔτV      = 0.3*cfl*max(Δ...)^2 ./ maximum(ηx)
-    ΔτP      = 1*cfl*minimum(ηx)*min(Δ...)/2
+    # Time steps
+    L      = sqrt( (xmax-xmin)^2 + (ymax-ymin)^2 )
+    ΔτV.v .= to_device( cflV*max(Δ...)^2 ./ ηv2 )
+    ΔτV.c .= to_device( cflV*max(Δ...)^2 ./ ηc2 )
+    ΔτP.x .= to_device( cflP.*ηx.*min(Δ...)./L  )
+    ΔτP.y .= to_device( cflP.*ηy.*min(Δ...)./L  )
 
     kernel_StrainRates!    = StrainRates!(device)
     kernel_Stress!         = Stress!(device)
@@ -200,7 +220,7 @@ function main(::Type{DAT}; device) where DAT
         kernel_Residuals!(R, τ, P, b, Δ; ndrange=(ncx+2,ncy+2))
         kernel_RateUpdate!(∂V∂τ, ∂P∂τ, R, ∇v, θ; ndrange=(ncx+2,ncy+2))
         kernel_SolutionUpdate!(V, P, ∂V∂τ, ∂P∂τ, ΔτV, ΔτP; ndrange=(ncx+2,ncy+2))
-        if iter==1 || mod(iter,100)==0
+        if iter==1 || mod(iter,nout)==0
             errx = (; c = mean(abs.(R.x.c)), v = mean(abs.(R.x.v)) )
             erry = (; c = mean(abs.(R.y.c)), v = mean(abs.(R.y.v)) ) 
             errp = (; x = mean(abs.(∇v.x )), y = mean(abs.(∇v.y )) )
@@ -215,6 +235,7 @@ function main(::Type{DAT}; device) where DAT
         end
     end
 
+    #########################################################################################
     Lx, Ly = xmax-xmin, ymax-ymin
     f = Figure(resolution = ( Lx/Ly*600,600), fontsize=25, aspect = 2.0)
 
@@ -225,8 +246,6 @@ function main(::Type{DAT}; device) where DAT
     # hm = heatmap!(ax1, xce.x, xce.y, to_host(V.x.c), colormap = (:turbo, 0.85))
     # hm = heatmap!(ax1, xce.x, xce.y, to_host(V.y.c), colormap = (:turbo, 0.85))
     # hm = heatmap!(ax1, xv.x, xc.y, to_host(η.x), colormap = (:turbo, 0.85))
-
-
 
     colsize!(f.layout, 1, Aspect(1, Lx/Ly))
     GLMakie.Colorbar(f[1, 2], hm, label = "P", width = 20, labelsize = 25, ticklabelsize = 14 )
