@@ -109,7 +109,7 @@ end
         ∂τxy∂ξ     = ∂_∂ξ(τ.xy.y[i+1,j], τ.xy.y[i-1+1,j], Δ)
         ∂P∂ξ       = ∂_∂ξ(   P.y[i+1,j],    P.y[i-1+1,j], Δ)
 
-        ∂τxx∂η     = ∂_∂η(τ.xx.x[i,j+1], τ.xx.y[i,j-1+1], Δ)
+        ∂τxx∂η     = 0*∂_∂η(τ.xx.x[i,j+1], τ.xx.y[i,j-1+1], Δ)
         ∂τyy∂η     = ∂_∂η(τ.yy.x[i,j+1], τ.yy.x[i,j-1+1], Δ)
         ∂τyx∂η     = ∂_∂η(τ.xy.x[i,j+1], τ.xy.x[i,j-1+1], Δ)
         ∂P∂η       = ∂_∂η(   P.x[i,j+1],    P.x[i,j-1+1], Δ)
@@ -120,7 +120,7 @@ end
         ∂τxy∂x     = ∂τxy∂ξ * ∂ξ∂x + ∂τyx∂η * ∂η∂x            # ⚠ assume τyx = τxy !!
         ∂P∂x       = ∂P∂ξ   * ∂ξ∂x + ∂P∂η   * ∂η∂x
         ∂P∂y       = ∂P∂ξ   * ∂ξ∂y + ∂P∂η   * ∂η∂y 
-        R.x.v[i,j] = ∂τxx∂x + ∂τyx∂y - ∂P∂x
+        R.x.v[i,j] = ∂τxx∂x + 0*∂τyx∂y - 0*∂P∂x
         R.y.v[i,j] = ∂τyy∂y + ∂τxy∂x - ∂P∂y + b.y.v[i,j]
     end
     @inbounds if i>1 && j>1 && i<size(R.x.c,1) && j<size(R.x.c,2)
@@ -230,18 +230,20 @@ end
 
 function main(::Type{DAT}; device) where DAT
     n          = 1
-    ncx, ncy   = n*120-2, n*120-2
+    # ncx, ncy   = n*120-2, n*120-2
+    ncx, ncy   = 21, 21
     xmin, xmax = -3.0, 3.0
-    ymin, ymax = -3.0, 3.0
+    ymin, ymax = -5.0, 0.0
     ε̇bg        = -1*0
     rad        = 0.5
-    ϵ          = 5e-8      # nonlinear tolerence
-    itmax      = 10000     # max number of iters
+    ϵ          = 1e-10      # nonlinear tolerence
+    it         = 1
+    itmax      = 2#20000     # max number of iters
+    nout       = 1#500       # check frequency
     errx0      = (1. , 1.0)
-    nout       = 500       # check frequency
     θ          = 3.0/ncx
     η_inc      = 1.
-    ρ_inc      = 0.
+    ρ_inc      = 1.
     g          = -1.0
     adapt_mesh = true
     options    = (; 
@@ -259,8 +261,8 @@ function main(::Type{DAT}; device) where DAT
         cflP       = 1.0
     end
 
-    cflV       = 0.25/5000
-    cflP       = 1.0/1
+    cflV       = 0.25  
+    cflP       = 1.0
 
     η    = ScalarFSG(DAT, device, :XY, ncx, ncy)
     P    = ScalarFSG(DAT, device, :XY, ncx, ncy)
@@ -417,10 +419,24 @@ function main(::Type{DAT}; device) where DAT
     L      = sqrt( (xmax-xmin)^2 + (ymax-ymin)^2 )
     maxΔ   = max( maximum(X.v.x[2:end,:] .- X.v.x[1:end-1,:]), maximum(X.v.y[:,2:end] .- X.v.y[:,1:end-1])  )
     minΔ   = min( minimum(X.v.x[2:end,:] .- X.v.x[1:end-1,:]), minimum(X.v.y[:,2:end] .- X.v.y[:,1:end-1])  )
-    ΔτV.v .= to_device( cflV*maxΔ^2 ./ ηv2)
-    ΔτV.c .= to_device( cflV*maxΔ^2 ./ ηc2)
-    ΔτP.x .= to_device( cflP.*ηx.*minΔ./L )
-    ΔτP.y .= to_device( cflP.*ηy.*minΔ./L )
+    ΔτV.v .= to_device( cflV*minΔ^2 ./ ηv2)
+    ΔτV.c .= to_device( cflV*minΔ^2 ./ ηc2)
+    ΔτP.x .= to_device( cflP.*ηx.*maxΔ./L )
+    ΔτP.y .= to_device( cflP.*ηy.*maxΔ./L )
+
+    @show θ
+    @show cflV*minΔ^2 ./ ηv2[1]
+    @show cflV*minΔ^2 ./ ηc2[1]
+    @show  cflP.*ηx[1].*maxΔ./L 
+    @show  cflP.*ηy[1].*maxΔ./L 
+
+    θ = 0.0719948316447661
+
+    ΔτV.v .= to_device( 0.0019011669708533549.*ones(size(ηv)))
+    ΔτV.c .= to_device( 0.0019011669708533549.*ones(size(ηc)))
+    ΔτP.x .= to_device( 0.02619047619047619  .*ones(size(ηx)))
+    ΔτP.y .= to_device( 0.02619047619047619  .*ones(size(ηy)))
+
 
     kernel_StrainRates!    = StrainRates!(device)
     kernel_Stress!         = Stress!(device)
@@ -440,10 +456,20 @@ function main(::Type{DAT}; device) where DAT
             erry = (; c = mean(abs.(R.y.c)), v = mean(abs.(R.y.v)) ) 
             errp = (; x = mean(abs.(∇v.x )), y = mean(abs.(∇v.y )) )
             if iter==1 errx0 = errx end
-            @printf("Iteration %06d\n", iter)
-            @printf("Rx = %2.2e %2.2e\n", errx.c, errx.v)
-            @printf("Ry = %2.2e %2.2e\n", erry.c, erry.v)
-            @printf("Rp = %2.2e %2.2e\n", errp.x, errp.y)
+            # @printf("Iteration %06d\n", iter)
+            # @printf("Rx = %2.2e %2.2e\n", errx.c, errx.v)
+            # @printf("Ry = %2.2e %2.2e\n", erry.c, erry.v)
+            # @printf("Rp = %2.2e %2.2e\n", errp.x, errp.y)
+            norm_Rx = 0.5*( norm(R.x.c[2:end-1,2:end-1])/sqrt(length(R.x.c[2:end-1,2:end-1])) + norm(R.x.v)/sqrt(length(R.x.v)) )
+            norm_Ry = 0.5*( norm(R.y.c[2:end-1,2:end-1])/sqrt(length(R.y.c[2:end-1,2:end-1])) + norm(R.y.v)/sqrt(length(R.y.v)) )
+            norm_Rp = 0.5*( norm(∇v.x[:,2:end-1])/sqrt(length(∇v.x[:,2:end-1])) + norm(∇v.y[2:end-1,:])/sqrt(length(∇v.y[2:end-1,:])) )
+            @printf("it = %03d, iter = %05d, nRx=%1.6e nRy=%1.6e nRp=%1.6e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
+            @printf("%1.6e %1.6e\n", norm(R.x.v)/sqrt(length(R.x.v)) , norm(R.x.c[2:end-1,2:end-1])/sqrt(length(R.x.c[2:end-1,2:end-1])))
+
+            norm_Rx = 0.5*( norm(V.x.c[2:end-1,2:end-1])/sqrt(length(V.x.c[2:end-1,2:end-1])) + norm(V.x.v)/sqrt(length(V.x.v)) )
+            norm_Ry = 0.5*( norm(V.y.c[2:end-1,2:end-1])/sqrt(length(V.y.c[2:end-1,2:end-1])) + norm(V.y.v)/sqrt(length(V.y.v)) )
+            norm_Rp = 0.5*( norm(P.x[:,2:end-1])/sqrt(length(P.x[:,2:end-1])) + norm(P.y[2:end-1,:])/sqrt(length(P.y[2:end-1,:])) )
+            @printf("it = %03d, iter = %05d, nRx=%1.6e nRy=%1.6e nRp=%1.6e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
             if isnan(maximum(errx)) error("NaN à l'ail!") end
             if (maximum(errx)>1e3) error("Stop before explosion!") end
             if maximum(errx) < ϵ && maximum(erry) < ϵ && maximum(errp) < ϵ
@@ -456,7 +482,8 @@ function main(::Type{DAT}; device) where DAT
     # Generate data
     vertx = [  X.v.x[1:end-1,1:end-1][:]  X.v.x[2:end-0,1:end-1][:]  X.v.x[2:end-0,2:end-0][:]  X.v.x[1:end-1,2:end-0][:] ] 
     verty = [  X.v.y[1:end-1,1:end-1][:]  X.v.y[2:end-0,1:end-1][:]  X.v.y[2:end-0,2:end-0][:]  X.v.y[1:end-1,2:end-0][:] ] 
-    sol   = ( vx=to_host(V.x.c[2:end-1,2:end-1][:]), vy=to_host(V.y.c[2:end-1,2:end-1][:]), p=avWESN(to_host(P.x[:,2:end-1]), to_host(P.y[2:end-1,:]))[:], η=avWESN(to_host(η.x[:,2:end-1]), to_host(η.y[2:end-1,:]))[:])
+    # sol   = ( vx=to_host(V.x.c[2:end-1,2:end-1][:]), vy=to_host(V.y.c[2:end-1,2:end-1][:]), p=avWESN(to_host(P.x[:,2:end-1]), to_host(P.y[2:end-1,:]))[:], η=avWESN(to_host(η.x[:,2:end-1]), to_host(η.y[2:end-1,:]))[:])
+    sol   = ( vx=to_host(R.x.c[2:end-1,2:end-1][:]), vy=to_host(R.y.c[2:end-1,2:end-1][:]), p=avWESN(to_host(P.x[:,2:end-1]), to_host(P.y[2:end-1,:]))[:], η=avWESN(to_host(η.x[:,2:end-1]), to_host(η.y[2:end-1,:]))[:])
     
     Lx, Ly = xmax-xmin, ymax-ymin
     f = Figure(resolution = ( Lx/Ly*1000,1000), fontsize=25, aspect = 2.0)
@@ -467,11 +494,18 @@ function main(::Type{DAT}; device) where DAT
     ax2 = Axis(f[1, 2], title = "Surface Vx", xlabel = "x [km]", ylabel = "Vx [m/s]")
     lines!(ax2, X.v.x[2:end-1,end][:], to_host(V.x.v[2:end-1,end][:]))
 
+    # ax2 = Axis(f[2, 1:2], title = "P", xlabel = "x [km]", ylabel = "y [km]")
+    # min_v = minimum( sol.p ); max_v = maximum( sol.p )
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    # poly!(ax2, p, color = sol.p, colormap = :turbo, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    # Colorbar(f[2, 3], colormap = :turbo, limits=limits, flipaxis = true, size = 25 )
+
     ax2 = Axis(f[2, 1:2], title = "Vy", xlabel = "x [km]", ylabel = "y [km]")
-    min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
+    min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
     limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
-    poly!(ax2, p, color = sol.vy, colormap = :turbo, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    poly!(ax2, p, color = sol.vx, colormap = :turbo, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
     Colorbar(f[2, 3], colormap = :turbo, limits=limits, flipaxis = true, size = 25 )
 
     DataInspector(f)
