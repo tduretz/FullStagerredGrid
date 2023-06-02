@@ -39,6 +39,24 @@ function VectorFSG(DAT, device, ncx, ncy)
     return Vector
 end
 
+function VectorFSG2(DAT, device, location, ncx, ncy)
+    if location==:XY
+        Vector = (;
+            x = (x=device_array(DAT, device, ncx+1, ncy+2), y=device_array(DAT, device, ncx+2, ncy+1)),
+            y = (x=device_array(DAT, device, ncx+1, ncy+2), y=device_array(DAT, device, ncx+2, ncy+1)),
+        )
+        [fill!(field, DAT(0.0)) for tuple in Vector for field in tuple]
+        return Vector
+    elseif location==:CV
+        Vector = (;
+            x = (v=device_array(DAT, device, ncx+1, ncy+1), c=device_array(DAT, device, ncx+2, ncy+2)),
+            y = (v=device_array(DAT, device, ncx+1, ncy+1), c=device_array(DAT, device, ncx+2, ncy+2)),
+        )
+        [fill!(field, DAT(0.0)) for tuple in Vector for field in tuple]
+        return Vector
+    end
+end
+
 
 function ScalarFSG(DAT, device, location, ncx, ncy)
     if location==:XY
