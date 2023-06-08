@@ -1,3 +1,108 @@
+    
+@views function FreeSurfaceDiscretisation(ηy, ∂ξ, ∂η, hx )
+    # Topography # See python notebook v5
+    η_surf   = ηy[:,end]
+    dkdx     = ∂ξ.∂x[1:2:end, end-1]
+    dkdy     = ∂ξ.∂y[1:2:end, end-1]
+    dedx     = ∂η.∂x[1:2:end, end-1]
+    dedy     = ∂η.∂y[1:2:end, end-1]
+    h_x      = hx[1:2:end]
+    eta      = η_surf
+    free_surface_params = (; # removed factor dz since we apply it directly to strain rates
+        ∂Vx∂∂Vx∂x = (-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedy .* dkdx .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2),
+        ∂Vx∂∂Vy∂x = (dedx .* dkdy .* h_x .^ 2 .+ 2 * dedx .* dkdy .- dedy .* dkdx .* h_x .^ 2 .- 2 * dedy .* dkdx) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2),
+        ∂Vx∂P     = (3 // 2) .* (dedx .* h_x .^ 2 .- dedx .+ 2 .* dedy .* h_x) ./ (eta .* (2 .* dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 .* dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 .* dedy .^ 2)),
+        ∂Vy∂∂Vx∂x = (.-2 * dedx .* dkdy .* h_x .^ 2 .- dedx .* dkdy .+ 2 * dedy .* dkdx .* h_x .^ 2 .+ dedy .* dkdx) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2),
+        ∂Vy∂∂Vy∂x = (.-2 * dedx .* dkdx .* h_x .^ 2 .- dedx .* dkdx .- 2 * dedx .* dkdy .* h_x .- dedy .* dkdy .* h_x .^ 2 .- 2 * dedy .* dkdy) ./ (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2),
+        ∂Vy∂P     = (3 // 2) .* (2 * dedx .* h_x .- dedy .* h_x .^ 2 .+ dedy) ./ (eta .* (2 * dedx .^ 2 .* h_x .^ 2 .+ dedx .^ 2 .+ 2 * dedx .* dedy .* h_x .+ dedy .^ 2 .* h_x .^ 2 .+ 2 * dedy .^ 2)),
+    )
+    return free_surface_params
+end
+
+###############################
+
+
+@views function CopyJacobianToDevice!(∂, ∂ξ, ∂η)
+    ∂.ξ.∂x.x .= to_device( ∂ξ.∂x[2:2:end-1,1:2:end-0])
+    ∂.ξ.∂x.y .= to_device( ∂ξ.∂x[1:2:end-0,2:2:end-1])
+    ∂.ξ.∂x.c .= to_device( ∂ξ.∂x[1:2:end-0,1:2:end-0])
+    ∂.ξ.∂x.v .= to_device( ∂ξ.∂x[2:2:end-1,2:2:end-1])
+    ∂.ξ.∂y.x .= to_device( ∂ξ.∂y[2:2:end-1,1:2:end-0])
+    ∂.ξ.∂y.y .= to_device( ∂ξ.∂y[1:2:end-0,2:2:end-1])
+    ∂.ξ.∂y.c .= to_device( ∂ξ.∂y[1:2:end-0,1:2:end-0])
+    ∂.ξ.∂y.v .= to_device( ∂ξ.∂y[2:2:end-1,2:2:end-1])
+    ∂.η.∂x.x .= to_device( ∂η.∂x[2:2:end-1,1:2:end-0])
+    ∂.η.∂x.y .= to_device( ∂η.∂x[1:2:end-0,2:2:end-1])
+    ∂.η.∂x.c .= to_device( ∂η.∂x[1:2:end-0,1:2:end-0])
+    ∂.η.∂x.v .= to_device( ∂η.∂x[2:2:end-1,2:2:end-1])
+    ∂.η.∂y.x .= to_device( ∂η.∂y[2:2:end-1,1:2:end-0])
+    ∂.η.∂y.y .= to_device( ∂η.∂y[1:2:end-0,2:2:end-1])
+    ∂.η.∂y.c .= to_device( ∂η.∂y[1:2:end-0,1:2:end-0])
+    ∂.η.∂y.v .= to_device( ∂η.∂y[2:2:end-1,2:2:end-1])
+    return nothing
+end
+
+###############################
+
+function Mesh_x( X, h, x0, m, xmin0, xmax0, σx, options )
+if options.swiss_x
+        xmin1 = (sinh.( σx.*(xmin0.-x0) ))
+        xmax1 = (sinh.( σx.*(xmax0.-x0) ))
+        sx    = (xmax0-xmin0)/(xmax1-xmin1)
+        x     = (sinh.( σx.*(X[1].-x0) )) .* sx  .+ x0
+    else
+        x = X[1]
+    end
+    return x
+end
+
+###############################
+
+function Mesh_y( X, h, y0, m, ymin0, ymax0, σy, options )
+    # y0    = ymax0
+    y     = X[2]
+    if options.swiss_y
+        ymin1 = (sinh.( σy.*(ymin0.-y0) ))
+        ymax1 = (sinh.( σy.*(ymax0.-y0) ))
+        sy    = (ymax0-ymin0)/(ymax1-ymin1)
+        y     = (sinh.( σy.*(X[2].-y0) )) .* sy  .+ y0
+    end
+    if options.topo
+        z0    = -h                     # topography height
+        y     = (y/ymin0)*((z0+m))-z0  # shift grid vertically
+    end   
+    return y
+end
+
+###############################
+
+@views function dhdx_num(xv4, yv4, Δ)
+    #  ∂h∂ξ * ∂ξ∂x + ∂h∂η * ∂η∂x
+    ∂h∂x = zero(xv4[:,end])
+    ∂h∂x[2:2:end-1] .= (yv4[3:2:end-0,end-1] .- yv4[1:2:end-2,end-1])./Δ.ξ
+    ∂h∂x[3:2:end-2] .= (yv4[4:2:end-1,end-1] .- yv4[2:2:end-3,end-1])./Δ.ξ
+    ∂h∂x[[1 end]]   .= ∂h∂x[[2 end-1]]   
+    return ∂h∂x
+end
+
+ ###############################
+
+ function ComputeForwardTransformation!(∂x, ∂y, xv4, yv4, Δ)
+    # ----------------------
+    ∂x.∂η[:,2:2:end-1] .= (xv4[:,3:2:end-0] .- xv4[:,1:2:end-2])./Δ.η
+    ∂x.∂η[:,3:2:end-2] .= (xv4[:,4:2:end-1] .- xv4[:,2:2:end-3])./Δ.η
+    ∂x.∂η[:,[1 end]]   .= ∂x.∂η[:,[2 end-1]]
+    # ----------------------
+    ∂y.∂ξ[2:2:end-1,:] .= (yv4[3:2:end-0,:] .- yv4[1:2:end-2,:])./Δ.ξ
+    ∂y.∂ξ[3:2:end-2,:] .= (yv4[4:2:end-1,:] .- yv4[2:2:end-3,:])./Δ.ξ
+    ∂y.∂ξ[[1 end],:]   .= ∂y.∂ξ[[2 end-1],:]  
+    # ----------------------
+    ∂y.∂η[:,2:2:end-1] .= (yv4[:,3:2:end-0] .- yv4[:,1:2:end-2])./Δ.η
+    ∂y.∂η[:,3:2:end-2] .= (yv4[:,4:2:end-1] .- yv4[:,2:2:end-3])./Δ.η
+    ∂y.∂η[:,[1 end]]   .= ∂y.∂η[:,[2 end-1]]     
+    return nothing
+ end
+
 function ComputeForwardTransformation_ini!( ∂x, ∂y, x_ini, y_ini, X_msh, Amp, x0, σ, m, xmin, xmax, ymin, ymax, σx, σy, ϵ, options)
  
     @time for i in eachindex(y_ini)          
