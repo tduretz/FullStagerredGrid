@@ -1,15 +1,14 @@
 # 3D Stokes taken from PT3D - https://github.com/tduretz/PT3D/blob/main/Stokes3D_Threads_v0.jl
 # Use TinyKerkels instead of plain Julia
 # DYREL
-using TinyKernels, Printf, GLMakie, Makie.GeometryBasics, MAT, WriteVTK
+using TinyKernels, Printf, WriteVTK
 import LinearAlgebra: norm
 import Statistics: mean
-Makie.inline!(false)
 
 include("setup_example.jl")
 
 # Select based upon your local device (:CPU, :CUDA, :AMDGPU, :Metal)
-backend = :CPU
+backend = :CUDA
 
 include("helpers.jl") # will be defined in TinyKernels soon
 include("Gershgorin3DSSG.jl")
@@ -164,26 +163,26 @@ end
         dVyΔy      = (Vy[i+1,j+1,k+1] - Vy[i+1,j,k+1]) * _Δy
         dVzΔz      = (Vz[i+1,j+1,k+1] - Vz[i+1,j+1,k]) * _Δz
         ∇V[i,j,k]  = dVxΔx + dVyΔy + dVzΔz
-        εxx[i,j,k] = dVxΔx - 1//3 * ∇V[i,j,k]
-        εyy[i,j,k] = dVyΔy - 1//3 * ∇V[i,j,k]
-        εzz[i,j,k] = dVzΔz - 1//3 * ∇V[i,j,k]
+        εxx[i,j,k] = dVxΔx - 1.0/3.0 * ∇V[i,j,k]
+        εyy[i,j,k] = dVyΔy - 1.0/3.0 * ∇V[i,j,k]
+        εzz[i,j,k] = dVzΔz - 1.0/3.0 * ∇V[i,j,k]
     end
 
     @inbounds if i<size(εxx,1)+1 && j<size(εxx,2)+1 && k<size(εxx,3)+1
         if (i<=size(εxy,1)) && (j<=size(εxy,2)) && (k<=size(εxy,3))
             dVxΔy      = (Vx[i,j+1,k+1] - Vx[i,j,k+1]) *_Δy 
             dVyΔx      = (Vy[i+1,j,k+1] - Vy[i,j,k+1]) *_Δx 
-            εxy[i,j,k] = 1//2*(dVxΔy + dVyΔx)
+            εxy[i,j,k] = 0.5*(dVxΔy + dVyΔx)
         end
         if (i<=size(εxz,1)) && (j<=size(εxz,2)) && (k<=size(εxz,3))
             dVxΔz      = (Vx[i  ,j+1,k+1] - Vx[i,j+1,k]) *_Δz                     
             dVzΔx      = (Vz[i+1,j+1,k  ] - Vz[i,j+1,k]) *_Δx 
-            εxz[i,j,k] = 1//2*(dVxΔz + dVzΔx)
+            εxz[i,j,k] = 0.5*(dVxΔz + dVzΔx)
         end
         if (i<=size(εyz,1)) && (j<=size(εyz,2)) && (k<=size(εyz,3))
             dVyΔz      = (Vy[i+1,j,k+1] - Vy[i+1,j,k]) *_Δz 
             dVzΔy      = (Vz[i+1,j+1,k] - Vz[i+1,j,k]) *_Δy 
-            εyz[i,j,k] = 1//2*(dVyΔz + dVzΔy)
+            εyz[i,j,k] = 0.5*(dVyΔz + dVzΔy)
         end
     end
     return
@@ -395,10 +394,9 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     ηc2  .= ηc
     wait( MaxLoc!(ηc2, ηc; ndrange=(ncx+2, ncy+2, ncz+2)) )
 
-    
     # --------- DYREL --------- #
     niter  = 1e5
-    nout   = 1000
+    nout   = 2000
     tol    = 1e-6
 
     # Steps
@@ -412,7 +410,7 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     wait( Gerschgorin2!( τxx, τyy, τzz, τxy, τxz, τyz, εxx, εyy, εzz, εxy, εxz, εyz, ηc, ηxy, ηxz, ηyz; ndrange=(ncx+2, ncy+2, ncz+2) ) )
     wait( Gerschgorin3!( λx, λy, λz, λp, τxx, τyy, τzz, τxy, τxz, τyz, P, P0, K, ∇V, Δx, Δy, Δz, Δt; ndrange=(ncx+2, ncy+2, ncz+2) ) )
     @show λmax =  maximum([maximum(λx.*hx) maximum(λy.*hy) maximum(λz.*hz) maximum(λp.*hp)])
-    @show minimum([minimum(λx[2:end-1,:,:].*hx[2:end-1,:,:]) minimum(λy[:,2:end-1,:].*hy[:,2:end-1,:]) minimum(λz[:,:,2:end-1].*hz[:,:,2:end-1]) minimum(λp.*hp)])
+    minimum([minimum(λx[2:end-1,:,:].*hx[2:end-1,:,:]) minimum(λy[:,2:end-1,:].*hy[:,2:end-1,:]) minimum(λz[:,:,2:end-1].*hz[:,:,2:end-1]) minimum(λp.*hp)])
 
     @show λmin = 1.0
     h_ρ   = 4.0/(λmin + λmax)
@@ -459,48 +457,6 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
         # end
     end
 
-    # fig = Figure(resolution = (1200, 1200))
-    # ax = LScene(fig[1, 1], show_axis=false)
-
-    # sgrid = SliderGrid(
-    #     fig[2, 1],
-    #     (label = "yz plane - x axis", range = 1:length(xce)),
-    #     (label = "xz plane - y axis", range = 1:length(yce)),
-    #     (label = "xy plane - z axis", range = 1:length(zce)),
-    # )
-
-    # lo = sgrid.layout
-    # nc = ncols(lo)
-
-    # plt = volumeslices!(ax, xce, yce, zce, P)
-
-    # # connect sliders to `volumeslices` update methods
-    # sl_yz, sl_xz, sl_xy = sgrid.sliders
-
-    # on(sl_yz.value) do v; plt[:update_yz][](v) end
-    # on(sl_xz.value) do v; plt[:update_xz][](v) end
-    # on(sl_xy.value) do v; plt[:update_xy][](v) end
-
-    # set_close_to!(sl_yz, .5length(xce))
-    # set_close_to!(sl_xz, .5length(yce))
-    # set_close_to!(sl_xy, .5length(zce))
-
-    # # add toggles to show/hide heatmaps
-    # hmaps = [plt[Symbol(:heatmap_, s)][] for s ∈ (:yz, :xz, :xy)]
-    # toggles = [Toggle(lo[i, nc + 1], active = true) for i ∈ 1:length(hmaps)]
-
-    # map(zip(hmaps, toggles)) do (h, t)
-    #     connect!(h.visible, t.active)
-    # end
-    # fig = Figure(resolution = ( Lx/Ly*800,800), fontsize=25, aspect = 2.0)
-    # ax = Axis(fig[1, 1], title = "Field", xlabel = "x [m]", ylabel = "y [m]")
-    # # heatmap!(ax, to_host(ηv[:, size(τxy,2)÷2, :]))
-    # hm = heatmap!(ax, to_host(P[2:end-1, size(τxy,2)÷2, 2:end-1]), colormap=cgrad(:roma, rev=true))
-    # Colorbar(fig[1, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
-
-    # DataInspector(fig)
-    # display(fig)
-
     Vxc            = to_host(0.5.*(Vx[1:end-1,2:end-1,2:end-1] .+ Vx[2:end-0,2:end-1,2:end-1]))
     Vyc            = to_host(0.5.*(Vy[2:end-1,1:end-1,2:end-1] .+ Vy[2:end-1,2:end-0,2:end-1]))
     Vzc            = to_host(0.5.*(Vz[2:end-1,2:end-1,1:end-1] .+ Vz[2:end-1,2:end-1,2:end-0]))
@@ -521,4 +477,4 @@ end
 #############################################################################################
 #############################################################################################
 
-@time Stokes3D( 1, eletype; device )
+@time Stokes3D( 10, eletype; device )
