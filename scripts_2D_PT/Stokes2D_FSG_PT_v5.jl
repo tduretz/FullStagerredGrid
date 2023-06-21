@@ -3,7 +3,7 @@
 using FullStaggeredGrid
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
-using Makie.GeometryBasics, FileIO, ForwardDiff, MAT
+using Makie.GeometryBasics, ForwardDiff, MAT
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,∂ξ∂x,∂η∂x) = ∂ξ∂x.*(f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ ∂η∂x.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,∂ξ∂y,∂η∂y) = ∂ξ∂y.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx .+ ∂η∂y.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy
@@ -23,6 +23,7 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
 
     # min_v = .0; max_v = 5.
 
+    # min_v = minimum( sol.p ); max_v = maximum( sol.p )
     # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
     # CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
@@ -92,7 +93,7 @@ end
     swiss      = false
     solve      = true
     # Numerics
-    ncx, ncy = 11, 11    # numerical grid resolution
+    ncx, ncy = 21, 21    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
     iterMax  = 3e4       # max number of iters
     nout     = 1000      # residual check frequency
@@ -215,8 +216,8 @@ end
     # Density
     ρ_1  .= 1.0; ρ_2  .= 1.0
     if inclusion
-        ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 2.
-        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 2.
+        ρ_1[xv2_1.^2 .+ (yv2_1.-y0).^2 .< rad] .= 1.
+        ρ_2[xv2_2[2:end-1,2:end-1].^2 .+ (yv2_2[2:end-1,2:end-1].-y0).^2 .< rad] .= 1.
     end
     # Smooth Viscosity
     η_1_sm    = zeros(size(η_1))
@@ -321,6 +322,8 @@ end
     vertx = [  xv2_1[1:end-1,1:end-1][:]  xv2_1[2:end-0,1:end-1][:]  xv2_1[2:end-0,2:end-0][:]  xv2_1[1:end-1,2:end-0][:] ] 
     verty = [  yv2_1[1:end-1,1:end-1][:]  yv2_1[2:end-0,1:end-1][:]  yv2_1[2:end-0,2:end-0][:]  yv2_1[1:end-1,2:end-0][:] ] 
     sol   = ( vx=Vx_2[2:end-1,2:end-1][:], vy=Vy_2[2:end-1,2:end-1][:], p=∂η∂xvWESN(P_1, P_2[:,1:end-1])[:], η=∂η∂xvWESN(η_1, η_2[:,1:end-1])[:])
+    # sol   = ( vx=Rx_2[:,:][:], vy=Ry_2[:,:][:], p=∂η∂xvWESN(P_1, P_2[:,1:end-1])[:], η=∂η∂xvWESN(η_1, η_2[:,1:end-1])[:])
+
     xc2   = ∂η∂xvWESN(xc2_1, xc2_2[:,1:end-1])[:] 
     yc2   = ∂η∂xvWESN(yc2_1, yc2_2[:,1:end-1])[:]
     PatchPlotMakie(vertx, verty, sol, minimum(xv2_1), maximum(xv2_1), minimum(yv2_1), maximum(yv2_1), xv2_1[:], yv2_1[:], xc2[:], yc2[:], write_fig=false)
@@ -345,6 +348,10 @@ end
     write(file, "dedy", Array(dedy))
     write(file, "hx",   Array(h_x) )
     close(file)
+
+    @show  ρ
+    @show Δτv_1[1] ./ ρ
+    @show κΔτp_2[1]
 
     return
 end

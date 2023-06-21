@@ -2,7 +2,7 @@
 # Initialisation
 using Plots, Printf, LinearAlgebra, SpecialFunctions
 import CairoMakie
-using Makie.GeometryBasics, FileIO
+using Makie.GeometryBasics
 # Macros
 @views    ∂_∂x(f1,f2,Δx,Δy,A) = (f1[2:size(f1,1),:] .- f1[1:size(f1,1)-1,:]) ./ Δx .+ A.*(f2[:,2:size(f2,2)] .- f2[:,1:size(f2,2)-1]) ./ Δy
 @views    ∂_∂y(f1,f2,Δx,Δy,C) = C.*(f1[:,2:size(f1,2)] .- f1[:,1:size(f1,2)-1]) ./ Δy# .+ C.*(f2[2:size(f2,1),:] .- f2[1:size(f2,1)-1,:]) ./ Δx

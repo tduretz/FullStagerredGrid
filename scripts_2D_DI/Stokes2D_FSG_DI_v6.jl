@@ -6,7 +6,7 @@ import Plots:spy
 @views   avWESN(A,B)  = 0.25.*(A[:,1:end-1] .+ A[:,2:end-0] .+ B[1:end-1,:] .+ B[2:end-0,:])
 @views h(x,A,σ,b,x0)    = A*exp(-(x-x0)^2/σ^2) + b
 @views dhdx(x,A,σ,b,x0) = -2*x/σ^2*A*exp(-(x-x0).^2/σ^2)
-@views y_coord(y,ymin,z0,m)   = (y/ymin)*((z0+m))-z0
+@views y_coord(y,ymin,z0,m) = (y/ymin)*((z0+m))-z0
 
 #--------------------------------------------------------------------#
 
