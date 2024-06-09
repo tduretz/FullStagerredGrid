@@ -61,6 +61,16 @@ end
             z = zv[k] - (-0.8150/2) 
             r = rc
             if ( (x*x + 0*y*y + z*z) < r*r )  Gv[i,j,k] = 0.25 end  
+
+            x = xv[i] - (0.5)
+            y = yv[j]
+            z = zv[k] - (-0.8150/4) 
+            if ( (x*x + 0*y*y + z*z) < r*r )  Gv[i,j,k] = 0.25 end
+
+            x = xv[i] 
+            y = yv[j]
+            z = zv[k] - 0*(+0.8150) 
+            if ( (x*x + 0*y*y + z*z) < r*r )  Gv[i,j,k] = 0.25 end
         end
     end
     return
@@ -75,7 +85,7 @@ end
     @inbounds if isin(Vx)
         # Y: Front / Back
         if j==1          Vx[i,j,k] = Vx[i,j+1,k] end
-        if j==size(Vz,2) Vx[i,j,k] = Vx[i,j-1,k] end
+        if j==size(Vx,2) Vx[i,j,k] = Vx[i,j-1,k] end
         # Z: South / North
         if k==1          Vx[i,j,k] = Vx[i,j,k+1] end
         if k==size(Vx,3) Vx[i,j,k] = Vx[i,j,k-1] end
@@ -87,13 +97,13 @@ end
         if i==size(Vy,1) Vy[i,j,k] = Vy[i-1,j,k] end
         # Z: South / North
         if k==1          Vy[i,j,k] = Vy[i,j,k+1] end
-        if k==size(Vx,3) Vy[i,j,k] = Vy[i,j,k-1] end
+        if k==size(Vy,3) Vy[i,j,k] = Vy[i,j,k-1] end
     end
     # Vz
     @inbounds if isin(Vz)
         # X: West / East
         if i==1          Vz[i,j,k] = Vz[i+1,j,k] end
-        if i==size(Vy,1) Vz[i,j,k] = Vz[i-1,j,k] end
+        if i==size(Vz,1) Vz[i,j,k] = Vz[i-1,j,k] end
         # Y: Front / Back
         if j==1          Vz[i,j,k] = Vz[i,j+1,k] end
         if j==size(Vz,2) Vz[i,j,k] = Vz[i,j-1,k] end
@@ -252,14 +262,14 @@ end
 
 @tiny function Kernel_InterpShearStress!( τxyc, τxzc, τyzc, τxy, τxz, τyz)
     i, j, k = @indices
-    @inline isin(A) = checkbounds(Bool, A, i, j, k)
-    @inbounds if isin(τxy)
+    # Free slip: Keep zero values where needed
+    @inbounds if i>1 && i<size(τxy,1) && j>1 && j<size(τxy,2) && k>=1 && k<=size(τxy,3)
         τxy[i,j,k] = 0.25*(τxyc[i,j,k+1] + τxyc[i+1,j,k+1] + τxyc[i,j+1,k+1] + τxyc[i+1,j+1,k+1])
     end
-    @inbounds if isin(τxz)
+    @inbounds if i>1 && i<size(τxz,1) && j>=1 && j<=size(τxz,2) && k>1 && k<size(τxz,3) 
         τxz[i,j,k] = 0.25*(τxzc[i,j+1,k] + τxzc[i+1,j+1,k] + τxzc[i,j+1,k+1] + τxzc[i+1,j+1,k+1])
     end
-    @inbounds if isin(τyz)
+    @inbounds if i>=1 && i<=size(τyz,1) && j>1 && j<size(τyz,2) && k>1 && k<size(τyz,3) 
         τyz[i,j,k] = 0.25*(τyzc[i+1,j,k] + τyzc[i+1,j+1,k] + τyzc[i+1,j,k+1] + τyzc[i+1,j+1,k+1])
     end
     return
@@ -367,12 +377,17 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     
     Δt     = 1e4
     t      = 0.0
-    nt     = 1
+    nt     = 30
 
     write_out    = true
     write_nout   = 1
     restart_from = 0
+    visu         = true
 
+    # --------- DYREL --------- #
+    niter  = 1e5
+    nout   = 1
+    tol    = 1e-8
 
     #-----------
     # Load benchmark
@@ -489,9 +504,6 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     wait( MaxLoc!(ηc2, ηc; ndrange=(ncx+2, ncy+2, ncz+2)) )
 
     # --------- DYREL --------- #
-    niter  = 1e5
-    nout   = 1000
-    tol    = 1e-8
 
     # Steps
     hx[2:end-1,2:end-1,2:end-1] .= 1.0 ./av2x_arit(ηc2)*4
@@ -527,20 +539,20 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
         fname = @sprintf("./Breakpoint%05d.h5", restart_from)
         @printf("Reading file %s\n", fname)
         h5open(fname, "r") do file
-            Vx    .= read(file, "Vx")
-            Vy    .= read(file, "Vy")
-            Vz    .= read(file, "Vz")
-            P     .= read(file, "P")
-            τxx   .= read(file, "Txx")
-            τyy   .= read(file, "Tyy")
-            τzz   .= read(file, "Tzz")
-            τxy   .= read(file, "Txy")
-            τxz   .= read(file, "Txz")
-            τyz   .= read(file, "Tyz")
-            dVxdτ .= read(file, "dVxdt")
-            dVydτ .= read(file, "dVydt")
-            dVzdτ .= read(file, "dVzdt")
-            dPdτ  .= read(file, "dPdt")
+            Vx    .= to_device(read(file, "Vx")   )
+            Vy    .= to_device(read(file, "Vy")   )
+            Vz    .= to_device(read(file, "Vz")   )
+            P     .= to_device(read(file, "P")    )
+            τxx   .= to_device(read(file, "Txx")  )
+            τyy   .= to_device(read(file, "Tyy")  )
+            τzz   .= to_device(read(file, "Tzz")  )
+            τxy   .= to_device(read(file, "Txy")  )
+            τxz   .= to_device(read(file, "Txz")  )
+            τyz   .= to_device(read(file, "Tyz")  )
+            dVxdτ .= to_device(read(file, "dVxdt"))
+            dVydτ .= to_device(read(file, "dVydt"))
+            dVzdτ .= to_device(read(file, "dVzdt"))
+            dPdτ  .= to_device(read(file, "dPdt") )
         end
         it0 = restart_from+1
     end
@@ -614,7 +626,29 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
                 wait( ComputeStressCenters!( τxx, τyy, τzz, τxyc, τxzc, τyzc, τII, λ̇,  0.0.*τxx0,  0.0.*τyy0,  0.0.*τzz0,  0.0.*τxy0,  0.0.*τxz0,  0.0.*τyz0, εxx, εyy, εzz, εxy, εxz, εyz, εII, ηc, Gc, Gv, P, Δt, pl, false; ndrange=(ncx+2, ncy+2, ncz+2) ) )
                 wait( InterpShearStress!( τxyc, τxzc, τyzc, τxy, τxz, τyz; ndrange=(ncx+2, ncy+2, ncz+2)) )
                 wait( ComputeResiduals!( Fx, Fy, Fz, Fp, τxx, τyy, τzz, τxy, τxz, τyz, -hp.*δp, 0.0.*P0, K, ∇V, Δx, Δy, Δz, Δt; ndrange=(ncx+2, ncy+2, ncz+2) ) )  
+                
+                # @show norm(∇V)
+                # @show norm(εxx)
+                # @show norm(εyy)
+                # @show norm(εzz)
+                # @show norm(εxy)
+                # @show norm(τxx)
+                # @show norm(τyy)
+                # @show norm(τzz)
+                # @show norm(τxyc)
+                # @show norm(τxzc)
+                # @show norm(τxzc)
+                # @show norm(τxy)
+                # @show norm(τxz)
+                # @show norm(τxz)
+                # @show norm(Fx)
+                # @show norm(Fy)
+                # @show norm(Fz)
+                # @show norm(Fp)
+                
+                λmin0 = λmin
                 λmin  = (sum(δx[:,2:end-1,2:end-1].*Fx) + sum(δy[2:end-1,:,2:end-1].*Fy) + sum(δz[2:end-1,2:end-1,:].*Fz) + sum(δp[2:end-1,2:end-1,2:end-1].*Fp)) / (sum(δx[:,2:end-1,2:end-1].*δx[:,2:end-1,2:end-1]) + sum(δy[2:end-1,:,2:end-1].*δy[2:end-1,:,2:end-1]) + sum(δz[2:end-1,2:end-1,:].*δz[2:end-1,2:end-1,:]) + sum(δp[2:end-1,2:end-1,2:end-1].*δp[2:end-1,2:end-1,2:end-1]))
+                if λmin<0. λmin = λmin0 end
                 # Adapt optimal parameters
                 h_ρ   = 4.0/(λmin + λmax)
                 ch_ρ  = 4.0*sqrt(λmin*λmax)/(λmin + λmax)
@@ -626,18 +660,20 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
         τii_vec[it] = mean(τII)
         t_vec[it]   = t
 
-        fig = Figure(resolution = ( Lx/Lz*800,800), fontsize=25, aspect = 2.0)
-        ax = Axis(fig[1, 1], title = "Field", xlabel = "x [m]", ylabel = "y [m]")
-        lines!(t_vec[1:it], τ_bench[1:it])
-        scatter!(ax, t_vec[1:it], τii_vec[1:it])
-        ax = Axis(fig[2, 1])
-        # heatmap!(ax, to_host(ηv[:, size(τxy,2)÷2, :]))
-        hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(P[2:end-1, 2, 2:end-1]), colormap=cgrad(:roma, rev=true))
-        Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
-        # hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(τII), colormap=cgrad(:roma, rev=true))
-        # Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
-        DataInspector(fig)
-        display(fig)
+        if visu
+            fig = Figure(resolution = ( Lx/Lz*800,800), fontsize=25, aspect = 2.0)
+            ax = Axis(fig[1, 1], title = "Field", xlabel = "x [m]", ylabel = "y [m]")
+            lines!(t_vec[1:it], τ_bench[1:it])
+            scatter!(ax, t_vec[1:it], τii_vec[1:it])
+            ax = Axis(fig[2, 1])
+            # heatmap!(ax, to_host(ηv[:, size(τxy,2)÷2, :]))
+            hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(P[2:end-1, 2, 2:end-1]), colormap=cgrad(:roma, rev=true))
+            Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
+            # hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(τII), colormap=cgrad(:roma, rev=true))
+            # Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
+            DataInspector(fig)
+            display(fig)
+        end
 
         #---------------------------------------------#
         # Breakpoint business

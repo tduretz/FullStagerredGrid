@@ -93,7 +93,7 @@ end
     swiss      = false
     solve      = true
     # Numerics
-    ncx, ncy = 21, 21    # numerical grid resolution
+    ncx, ncy = 61, 61    # numerical grid resolution
     ε        = 1e-6      # nonlinear tolerance
     iterMax  = 3e4       # max number of iters
     nout     = 1000      # residual check frequency
@@ -276,6 +276,7 @@ end
             ε̇xx_2[:,1:end-1] .=  ∂_∂x(Vx_2[:,2:end-1],Vx_1,Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) .- 1.0/3.0*∇v_2[:,1:end-1]
             ε̇yy_2[:,1:end-1] .=  ∂_∂y(Vy_1,Vy_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) .- 1.0/3.0*∇v_2[:,1:end-1]
             ε̇xy_2[:,1:end-1] .= (∂_∂y(Vx_1,Vx_2[:,2:end-1],Δx,Δy,∂ξ∂yc_2,∂η∂yc_2) .+ ∂_∂x(Vy_2[:,2:end-1],Vy_1, Δx,Δy,∂ξ∂xc_2,∂η∂xc_2) ) / 2.
+            # @show ε̇xx_2[:, end]
             τxx_1 .= 2.0 .* η_1 .* ε̇xx_1
             τxx_2 .= 2.0 .* η_2 .* ε̇xx_2
             τyy_1 .= 2.0 .* η_1 .* ε̇yy_1

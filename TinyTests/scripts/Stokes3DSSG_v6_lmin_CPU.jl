@@ -3,15 +3,15 @@
 # DYREL
 # Try VEP with center based formulation
 using TinyKernels, Printf, WriteVTK, HDF5
-# using GLMakie, Makie.GeometryBasics, MAT
 import LinearAlgebra: norm
 import Statistics: mean
-# Makie.inline!(false)
+using GLMakie, Makie.GeometryBasics, MAT
+Makie.inline!(false)
 
 include("setup_example.jl")
 
 # Select based upon your local device (:CPU, :CUDA, :AMDGPU, :Metal)
-backend = :CUDA
+backend = :CPU
 
 include("helpers.jl") # will be defined in TinyKernels soon
 include("Gershgorin3DSSG_centers.jl")
@@ -61,6 +61,16 @@ end
             z = zv[k] - (-0.8150/2) 
             r = rc
             if ( (x*x + 0*y*y + z*z) < r*r )  Gv[i,j,k] = 0.25 end  
+
+            x = xv[i] - (0.5)
+            y = yv[j]
+            z = zv[k] - (-0.8150/4) 
+            if ( (x*x + 0*y*y + z*z) < r*r )  Gv[i,j,k] = 0.25 end
+
+            x = xv[i] 
+            y = yv[j]
+            z = zv[k] - 0*(+0.8150) 
+            if ( (x*x + 0*y*y + z*z) < r*r )  Gv[i,j,k] = 0.25 end
         end
     end
     return
@@ -252,9 +262,8 @@ end
 
 @tiny function Kernel_InterpShearStress!( τxyc, τxzc, τyzc, τxy, τxz, τyz)
     i, j, k = @indices
-    @inline isin(A) = checkbounds(Bool, A, i, j, k)
     # Free slip: Keep zero values where needed
-    @inbounds if i>1 && i<size(τxy,1) && j>1 && j<size(τxy,2) && k>=1 && k<=size(τxy,3) # isin(τxy)
+    @inbounds if i>1 && i<size(τxy,1) && j>1 && j<size(τxy,2) && k>=1 && k<=size(τxy,3)
         τxy[i,j,k] = 0.25*(τxyc[i,j,k+1] + τxyc[i+1,j,k+1] + τxyc[i,j+1,k+1] + τxyc[i+1,j+1,k+1])
     end
     @inbounds if i>1 && i<size(τxz,1) && j>=1 && j<=size(τxz,2) && k>1 && k<size(τxz,3) 
@@ -331,6 +340,30 @@ end
 
 # ###############################
 
+@tiny function Kernel_Joldes2011!( δx, δy, δz, δp, hx, hy, hz, hp, dVxdτ, dVydτ, dVzdτ, dPdτ, ncx, ncy, ncz, sign, pow )
+    i, j, k = @indices
+    @inbounds if i<ncx+1 && j<ncy+1 && k<ncz+1
+        if (i<=size(dVxdτ,1)) && (j<=size(dVxdτ,2)) && (k<=size(dVxdτ,3))
+            δx[i,j+1,k+1] = sign * hx[i,j+1,k+1]^pow * dVxdτ[i,j,k]
+        end
+
+        if (i<=size(dVydτ,1)) && (j<=size(dVydτ,2)) && (k<=size(dVydτ,3))
+            δy[i+1,j,k+1] = sign * hy[i+1,j,k+1]^pow * dVydτ[i,j,k]
+        end
+
+        if (i<=size(dVzdτ,1)) && (j<=size(dVzdτ,2)) && (k<=size(dVzdτ,3))
+            δz[i+1,j+1,k] = sign * hz[i+1,j+1,k]^pow * dVzdτ[i,j,k]
+        end
+
+        if (i<=size(dPdτ,1)) && (j<=size(dPdτ,2)) && (k<=size(dPdτ,3))
+            δp[i+1,j+1,k+1] = sign * hp[i+1,j+1,k+1]^pow * dPdτ[i,j,k]
+        end
+    end
+    return
+end
+
+# ###############################
+
 @tiny function Kernel_UpdateVP!( dVxdτ, dVydτ, dVzdτ, dPdτ, Vx, Vy, Vz, P, hx, hy, hz, hp, ncx, ncy, ncz )
     i, j, k = @indices
     @inbounds if i<ncx+1 && j<ncy+1 && k<ncz+1
@@ -373,13 +406,18 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     write_out    = true
     write_nout   = 1
     restart_from = 0
+    visu         = false
 
+    # --------- DYREL --------- #
+    niter  = 1e5
+    nout   = 1000
+    tol    = 1e-8
 
     #-----------
-    # # Load benchmark
-    # file = matopen(string("data/DataM2Di_EVP_model1.mat"))
-    # τ_bench = read(file, "Tiivec") # note that this does NOT introduce a variable ``varname`` into scope
-    # close(file)
+    # Load benchmark
+    file = matopen(string("data/DataM2Di_EVP_model1.mat"))
+    τ_bench = read(file, "Tiivec") # note that this does NOT introduce a variable ``varname`` into scope
+    close(file)
     #-----------
     P     = device_array(DAT, device, ncx+2, ncy+2, ncz+2); fill!(P,  DAT(0.))
     P0    = device_array(DAT, device, ncx+2, ncy+2, ncz+2); fill!(P0, DAT(0.))
@@ -470,6 +508,7 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     Gerschgorin2!         = Kernel_Gerschgorin2!(device)
     Gerschgorin2b!        = Kernel_Gerschgorin2b!(device)
     Gerschgorin3!         = Kernel_Gerschgorin3!(device)
+    Joldes2011!           = Kernel_Joldes2011!(device)
     MaxLoc!               = Kernel_MaxLoc!(device)
     InterpShearStress!    = Kernel_InterpShearStress!(device)
     CheckYield!           = Kernel_CheckYield!(device)
@@ -490,9 +529,6 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     wait( MaxLoc!(ηc2, ηc; ndrange=(ncx+2, ncy+2, ncz+2)) )
 
     # --------- DYREL --------- #
-    niter  = 1e5
-    nout   = 1000
-    tol    = 1e-8
 
     # Steps
     hx[2:end-1,2:end-1,2:end-1] .= 1.0 ./av2x_arit(ηc2)*4
@@ -520,8 +556,6 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
     τxy .= 0.0
     τxz .= 0.0
     τyz .= 0.0
-
-    TinyKernels.device_synchronize(device)
 
     #---------------------------------------------#
     # Breakpoint business
@@ -574,8 +608,7 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
             wait( UpdateVP!( dVxdτ, dVydτ, dVzdτ, dPdτ, Vx, Vy, Vz, P, hx, hy, hz, hp, ncx, ncy, ncz; ndrange=(ncx+2, ncy+2, ncz+2) ) )
 
             if mod(iter,nout) == 0 || iter==1
-                wait( CheckYield!(F, λ̇, τII, P, τxx, τyy, τzz, τxyc, τxzc, τyzc, pl; ndrange=(ncx+2, ncy+2, ncz+2) ) )
-                TinyKernels.device_synchronize(device)
+                CheckYield!(F, λ̇, τII, P, τxx, τyy, τzz, τxyc, τxzc, τyzc, pl; ndrange=(ncx+2, ncy+2, ncz+2) )
                 nFx = norm(Fx)/sqrt(length(Fx))
                 nFy = norm(Fy)/sqrt(length(Fy))
                 nFz = norm(Fz)/sqrt(length(Fz))
@@ -604,25 +637,46 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
                 wait( Gerschgorin2!( τxx, τyy, τzz, τxyc, τxzc, τyzc, τxx0, τyy0, τzz0, τxy0, τxz0, τyz0, εxx, εyy, εzz, εxy, εxz, εyz, ηc, Gc, Gv, P, Δt, pl; ndrange=(ncx+2, ncy+2, ncz+2) ) )
                 wait( Gerschgorin2b!( τxyc, τxzc, τyzc, τxy, τxz, τyz; ndrange=(ncx+2, ncy+2, ncz+2)) )
                 wait( Gerschgorin3!( λx, λy, λz, λp, τxx, τyy, τzz, τxy, τxz, τyz, P, P0, K, ∇V, Δx, Δy, Δz, Δt; ndrange=(ncx+2, ncy+2, ncz+2) ) ) 
-                
+                λmax =  maximum([maximum(λx.*hx[:,2:end-1,2:end-1]) maximum(λy.*hy[2:end-1,:,2:end-1]) maximum(λz.*hz[2:end-1,2:end-1,:]) maximum(λp.*hp[2:end-1,2:end-1,2:end-1])])
                 # Joldes et al. (2011) --- v4 
-                δx[:,2:end-1,2:end-1]       .= hx[:,2:end-1,2:end-1].*dVxdτ
-                δy[2:end-1,:,2:end-1]       .= hy[2:end-1,:,2:end-1].*dVydτ
-                δz[2:end-1,2:end-1,:]       .= hz[2:end-1,2:end-1,:].*dVzdτ
-                δp[2:end-1,2:end-1,2:end-1] .= hp[2:end-1,2:end-1,2:end-1].*dPdτ
+                # δx[:,2:end-1,2:end-1]       .= hx[:,2:end-1,2:end-1].*dVxdτ
+                # δy[2:end-1,:,2:end-1]       .= hy[2:end-1,:,2:end-1].*dVydτ
+                # δz[2:end-1,2:end-1,:]       .= hz[2:end-1,2:end-1,:].*dVzdτ
+                # δp[2:end-1,2:end-1,2:end-1] .= hp[2:end-1,2:end-1,2:end-1].*dPdτ
+                wait( Joldes2011!( δx, δy, δz, δp, hx, hy, hz, hp, dVxdτ, dVydτ, dVzdτ, dPdτ, ncx, ncy, ncz, -1.0, 2.0; ndrange=(ncx+2, ncy+2, ncz+2) ) )
                 # Input: -hi.*δi,  Output: Field
                 # Make sure no force fector is accounted: 0.0.*τij
                 # No plasticity (false), just evaluate with already computed effective viscosity
-                wait( ComputeStrainRates!( ∇V, εxx, εyy, εzz, εxy, εxz, εyz, -hx.*δx, -hy.*δy, -hz.*δz, Δx, Δy, Δz; ndrange=(ncx+2, ncy+2, ncz+2) ) )
+                # wait( ComputeStrainRates!( ∇V, εxx, εyy, εzz, εxy, εxz, εyz, -hx.*δx, -hy.*δy, -hz.*δz, Δx, Δy, Δz; ndrange=(ncx+2, ncy+2, ncz+2) ) )
+                # wait( ComputeResiduals!( Fx, Fy, Fz, Fp, τxx, τyy, τzz, τxy, τxz, τyz, δp, 0.0.*P0, K, ∇V, Δx, Δy, Δz, Δt; ndrange=(ncx+2, ncy+2, ncz+2) ) )  
+
+                wait( ComputeStrainRates!( ∇V, εxx, εyy, εzz, εxy, εxz, εyz, δx, δy, δz, Δx, Δy, Δz; ndrange=(ncx+2, ncy+2, ncz+2) ) )
                 wait( ComputeStressCenters!( τxx, τyy, τzz, τxyc, τxzc, τyzc, τII, λ̇,  0.0.*τxx0,  0.0.*τyy0,  0.0.*τzz0,  0.0.*τxy0,  0.0.*τxz0,  0.0.*τyz0, εxx, εyy, εzz, εxy, εxz, εyz, εII, ηc, Gc, Gv, P, Δt, pl, false; ndrange=(ncx+2, ncy+2, ncz+2) ) )
                 wait( InterpShearStress!( τxyc, τxzc, τyzc, τxy, τxz, τyz; ndrange=(ncx+2, ncy+2, ncz+2)) )
-                wait( ComputeResiduals!( Fx, Fy, Fz, Fp, τxx, τyy, τzz, τxy, τxz, τyz, -hp.*δp, 0.0.*P0, K, ∇V, Δx, Δy, Δz, Δt; ndrange=(ncx+2, ncy+2, ncz+2) ) )  
+                wait( ComputeResiduals!( Fx, Fy, Fz, Fp, τxx, τyy, τzz, τxy, τxz, τyz, δp, 0.0.*P0, K, ∇V, Δx, Δy, Δz, Δt; ndrange=(ncx+2, ncy+2, ncz+2) ) )  
                 
-                TinyKernels.device_synchronize(device)
+                # @show norm(∇V)
+                # @show norm(εxx)
+                # @show norm(εyy)
+                # @show norm(εzz)
+                # @show norm(εxy)
+                # @show norm(τxx)
+                # @show norm(τyy)
+                # @show norm(τzz)
+                # @show norm(τxyc)
+                # @show norm(τxzc)
+                # @show norm(τxzc)
+                # @show norm(τxy)
+                # @show norm(τxz)
+                # @show norm(τxz)
+                # @show norm(Fx)
+                # @show norm(Fy)
+                # @show norm(Fz)
+                # @show norm(Fp)
+
+                wait( Joldes2011!( δx, δy, δz, δp, hx, hy, hz, hp, dVxdτ, dVydτ, dVzdτ, dPdτ, ncx, ncy, ncz, 1.0, 1.0; ndrange=(ncx+2, ncy+2, ncz+2) ) )
 
                 λmin  = (sum(δx[:,2:end-1,2:end-1].*Fx) + sum(δy[2:end-1,:,2:end-1].*Fy) + sum(δz[2:end-1,2:end-1,:].*Fz) + sum(δp[2:end-1,2:end-1,2:end-1].*Fp)) / (sum(δx[:,2:end-1,2:end-1].*δx[:,2:end-1,2:end-1]) + sum(δy[2:end-1,:,2:end-1].*δy[2:end-1,:,2:end-1]) + sum(δz[2:end-1,2:end-1,:].*δz[2:end-1,2:end-1,:]) + sum(δp[2:end-1,2:end-1,2:end-1].*δp[2:end-1,2:end-1,2:end-1]))
-                λmax =  maximum([maximum(λx.*hx[:,2:end-1,2:end-1]) maximum(λy.*hy[2:end-1,:,2:end-1]) maximum(λz.*hz[2:end-1,2:end-1,:]) maximum(λp.*hp[2:end-1,2:end-1,2:end-1])])
-
                 # Adapt optimal parameters
                 h_ρ   = 4.0/(λmin + λmax)
                 ch_ρ  = 4.0*sqrt(λmin*λmax)/(λmin + λmax)
@@ -634,18 +688,20 @@ function Stokes3D(n, ::Type{DAT}; device) where DAT
         τii_vec[it] = mean(τII)
         t_vec[it]   = t
 
-        # fig = Figure(resolution = ( Lx/Lz*800,800), fontsize=25, aspect = 2.0)
-        # ax = Axis(fig[1, 1], title = "Field", xlabel = "x [m]", ylabel = "y [m]")
-        # lines!(t_vec[1:it], τ_bench[1:it])
-        # scatter!(ax, t_vec[1:it], τii_vec[1:it])
-        # ax = Axis(fig[2, 1])
-        # # heatmap!(ax, to_host(ηv[:, size(τxy,2)÷2, :]))
-        # hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(P[2:end-1, 2, 2:end-1]), colormap=cgrad(:roma, rev=true))
-        # Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
-        # # hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(τII), colormap=cgrad(:roma, rev=true))
-        # # Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
-        # DataInspector(fig)
-        # display(fig)
+        if visu
+            fig = Figure(resolution = ( Lx/Lz*800,800), fontsize=25, aspect = 2.0)
+            ax = Axis(fig[1, 1], title = "Field", xlabel = "x [m]", ylabel = "y [m]")
+            lines!(t_vec[1:it], τ_bench[1:it])
+            scatter!(ax, t_vec[1:it], τii_vec[1:it])
+            ax = Axis(fig[2, 1])
+            # heatmap!(ax, to_host(ηv[:, size(τxy,2)÷2, :]))
+            hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(P[2:end-1, 2, 2:end-1]), colormap=cgrad(:roma, rev=true))
+            Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
+            # hm = heatmap!(ax, xce[2:end-1], zce[2:end-1], to_host(τII), colormap=cgrad(:roma, rev=true))
+            # Colorbar(fig[2, 2], hm, width = 20, labelsize = 25, ticklabelsize = 14 )
+            DataInspector(fig)
+            display(fig)
+        end
 
         #---------------------------------------------#
         # Breakpoint business
@@ -708,4 +764,4 @@ end
 #############################################################################################
 #############################################################################################
 
-@time Stokes3D( 2, eletype; device )
+@time Stokes3D( 20, eletype; device )

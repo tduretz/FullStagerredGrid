@@ -24,11 +24,12 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     CairoMakie.Axis(f[1,1]) #, aspect = ar
     min_v = minimum( sol.p ); max_v = maximum( sol.p )
 
-    min_v = .0; max_v = 5.
-    # min_v = minimum( sol.p ); max_v = maximum( sol.p )
-    limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
-    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
-    CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+    # PRESSURE
+    # min_v = .0; max_v = 5.
+    # # min_v = minimum( sol.p ); max_v = maximum( sol.p )
+    # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.p)]
+    # CairoMakie.poly!(p, color = sol.p, colormap = cmap, strokewidth = 1, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
     # CairoMakie.Axis(f[2,1], aspect = ar)
     # min_v = minimum( sol.vx ); max_v = maximum( sol.vx )
@@ -36,12 +37,17 @@ function PatchPlotMakie(vertx, verty, sol, xmin, xmax, ymin, ymax, x1, y1, x2, y
     # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
     # CairoMakie.poly!(p, color = sol.vx, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
 
-    # # CairoMakie.Axis(f[2,2], aspect = ar)
+    # CairoMakie.Axis(f[2,2], aspect = ar)
     # min_v = minimum( sol.vy ); max_v = maximum( sol.vy )
     # limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
     # p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
     # CairoMakie.poly!(p, color = sol.vy, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
     
+    min_v = minimum( sol.τII ); max_v = maximum( sol.τII )
+    limits = min_v ≈ max_v ? (min_v, min_v + 1) : (min_v, max_v)
+    p = [Polygon( Point2f0[ (vertx[i,j], verty[i,j]) for j=1:4] ) for i in 1:length(sol.vx)]
+    CairoMakie.poly!(p, color = sol.τII, colormap = cmap, strokewidth = 0, strokecolor = :white, markerstrokewidth = 0, markerstrokecolor = (0, 0, 0, 0), aspect=:image, colorrange=limits)
+
     # CairoMakie.scatter!(x1,y1, color=:white)
     # CairoMakie.scatter!(x2,y2, color=:white, marker=:xcross)
     CairoMakie.Colorbar(f[1, 2], colormap = cmap, limits=limits, flipaxis = true, size = 25 )
@@ -82,7 +88,7 @@ function Mesh_x( X, A, x0, σ, b, m, xmin0, xmax0, σx, swiss )
 end
 
 # 2D Poisson routine
-@views function Stokes2D_FSG()
+@views function Wave2D_FSG()
 
     dynamic    = false
     inclusion  = false
@@ -97,24 +103,28 @@ end
     rad      = 0.5
     y0       = -2.
     g        = -1.
-    K0       = 1.0
-    G0       = 100000000.0
+    K0       = 1e1
+    G0       = 1e0
     ρ0       = 1.0
-    η0       = 1e0
-
-    nt = 30
-    if dynamic 
-        c_eff = sqrt((K+4/3*G)/ρ) 
-        Δt    = min(1e10, 0.1*Δ.ξ/c_eff, 0.1*Δ.η/c_eff)
-    else
-        Δt    = 1.
-    end
-
+    η0       = 1e-2
     # Numerics
     ncx, ncy = 41, 41    # numerical grid resolution
+    Δξ, Δη  = (xmax-xmin)/ncx, (ymax-ymin)/ncy
+    if dynamic 
+        c_eff    = sqrt((K0+4/3*G0)/ρ0) 
+        Δt       = min(1e10, 0.1*Δξ/c_eff, 0.1*Δη/c_eff) /2
+        iterMax  = 1       # max number of iters
+        nout     = 1       # residual check frequency
+        nout_viz = 10
+        nt       = 200
+    else
+        Δt       = 1e0
+        iterMax  = 3e4     # max number of iters
+        nout     = 1000    # residual check frequency
+        nout_viz = 1
+        nt       = 10
+    end
     ε        = 1e-6      # nonlinear tolerance
-    iterMax  = 3e4       # max number of iters
-    nout     = 1000      # residual check frequency
     # Iterative parameters -------------------------------------------
     if adapt_mesh
         Reopt    = 0.5*π*1.75
@@ -127,8 +137,6 @@ end
     end
     ρ        = cfl*Reopt/ncx
     tol      = 1e-8
-    # Preprocessing
-    Δξ, Δη  = (xmax-xmin)/ncx, (ymax-ymin)/ncy
     # Array initialisation
     Vx_v        =   zeros(Dat, ncx+1, ncy+1)
     Vy_v        =   zeros(Dat, ncx+1, ncy+1)
@@ -178,6 +186,8 @@ end
     dVydτ_v     =   zeros(Dat, ncx+1, ncy+1)
     dVxdτ_c     =   zeros(Dat, ncx+0, ncy+0)
     dVydτ_c     =   zeros(Dat, ncx+0, ncy+0)
+    τII_j       =   zeros(Dat, ncx-0, ncy+1)        
+    τII_i       =   zeros(Dat, ncx+1, ncy-0+1) # FS
     # Initialisation
     xxv, yyv    = LinRange(xmin-Δξ/2, xmax+Δξ/2, 2ncx+3), LinRange(ymin-Δη/2, ymax+Δη/2, 2ncy+3)
     (xv4,yv4) = ([x for x=xxv,y=yyv], [y for x=xxv,y=yyv])
@@ -231,7 +241,6 @@ end
     ∂η∂xc_c = ∂η∂x[2:2:end-1,3:2:end-2]; ∂η∂xv_c = ∂η∂x[1:2:end-0,1:2:end-0]
     ∂η∂yc_v = ∂η∂y[3:2:end-2,2:2:end-1]; ∂η∂yv_v = ∂η∂y[2:2:end-1,2:2:end-1]
     ∂η∂yc_c = ∂η∂y[2:2:end-1,3:2:end-2]; ∂η∂yv_c = ∂η∂y[1:2:end-0,1:2:end-0]
-    
     # Velocity
     Vx_v .= -εbg.*xv2_v; Vx_c .= -εbg.*xv2_c
     Vy_v .=  εbg.*yv2_v; Vy_c .=  εbg.*yv2_c
@@ -239,8 +248,9 @@ end
     ηv  = η0
     ηe  = G0*Δt
     ηve = 1/(1/ηv + 1/ηe)
-    @show ηv, ηe, ηve
-    ηs_j  .= ηve;  ηs_i .= ηve
+    ν   = (3*K0 - 2*G0)/2/(3*K0 + G0)
+    @show ηv, ηe, ηve, ν
+    ηs_j  .= ηve;    ηs_i .= ηve
     ηb_j  .= K0*Δt;  ηb_i .= K0*Δt
     if inclusion
         ηs_j[xc2_v.^2 .+ (yc2_v.-y0).^2 .< rad] .= 100.
@@ -251,6 +261,10 @@ end
     if inclusion
         ρ_v[xv2_v.^2 .+ (yv2_v.-y0).^2 .< rad] .= 1.
         ρ_c[xv2_c[2:end-1,2:end-1].^2 .+ (yv2_c[2:end-1,2:end-1].-y0).^2 .< rad] .= 1.
+    end
+    if dynamic
+        P_j[xc2_v.^2 .+ (yc2_v.-y0).^2 .< rad] .= 5.
+        P_i[xc2_c.^2 .+ (yc2_c.-y0).^2 .< rad] .= 5.
     end
     # Smooth Viscosity
     ηs_j_sm    = zeros(size(ηs_j))
@@ -310,6 +324,7 @@ end
         # Time loop
         for it=1:nt
             @printf("it = %03d\n", it)
+            # Old guys
             τxx0_j .= τxx_j
             τxx0_i .= τxx_i
             τyy0_j .= τyy_j
@@ -318,25 +333,39 @@ end
             τxy0_i .= τxy_i
             P0_j   .= P_j
             P0_i   .= P_i
-        
             # PT loop
             iter=1; err=2*ε; err_evo1=[]; err_evo2=[];
             while (err>ε && iter<=iterMax)
+                #
+                # Vx_v[[1 end],:] .= Vx_v[[2 end-1],:]
+                # Vx_c[[1 end],:] .= Vx_c[[2 end-1],:]
+                # Vx_c[:,    [1]] .= Vx_c[:,      [2]]
+                # Vx_v[:,    [1]] .= Vx_v[:,      [2]]
                 # Surface values
                 dVxdx  = (Vx_v[2:end-0,end] - Vx_v[1:end-1,end])/Δξ   
                 dVydx  = (Vy_v[2:end-0,end] - Vy_v[1:end-1,end])/Δξ
                 P_surf = P_j[:,end]
+                if dynamic
+                    # See python notebook v5
+                    Vx_c[2:end-1,end] .= Vx_c[2:end-1,end-1] .+ duNddudx.*dVxdx .+ duNddvdx.*dVydx .+ duNdP.*P_surf .+ duNdTxx0.*τxx0_j[:,end] .+ duNdTyy0.*τyy0_j[:,end]  .+ duNdTxy0.*τxy0_j[:,end]
+                    Vy_c[2:end-1,end] .= Vy_c[2:end-1,end-1] .+ dvNddudx.*dVxdx .+ dvNddvdx.*dVydx .+ dvNdP.*P_surf .+ dvNdTxx0.*τxx0_j[:,end] .+ dvNdTyy0.*τyy0_j[:,end]  .+ dvNdTxy0.*τxy0_j[:,end]
+                    ∇v_j              .= ∂_∂x(Vx_v,Vx_c[2:end-1,:],Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) .+ ∂_∂y(Vy_c[2:end-1,:],Vy_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) 
+                    ∇v_i[:,1:end-1]   .= ∂_∂x(Vx_c[:,2:end-1],Vx_v,Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) .+ ∂_∂y(Vy_v,Vy_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) 
+                    P_j                    .= P0_j            .- ηb_j           .*∇v_j           
+                    P_i[:,1:end-1]         .= P0_i[:,1:end-1] .- ηb_i[:,1:end-1].*∇v_i[:,1:end-1]
+                end
+                P_surf = P_j[:,end]
                 # See python notebook v5
                 Vx_c[2:end-1,end] .= Vx_c[2:end-1,end-1] .+ duNddudx.*dVxdx .+ duNddvdx.*dVydx .+ duNdP.*P_surf .+ duNdTxx0.*τxx0_j[:,end] .+ duNdTyy0.*τyy0_j[:,end]  .+ duNdTxy0.*τxy0_j[:,end]
                 Vy_c[2:end-1,end] .= Vy_c[2:end-1,end-1] .+ dvNddudx.*dVxdx .+ dvNddvdx.*dVydx .+ dvNdP.*P_surf .+ dvNdTxx0.*τxx0_j[:,end] .+ dvNdTyy0.*τyy0_j[:,end]  .+ dvNdTxy0.*τxy0_j[:,end]
-                ∇v_j              .=  ∂_∂x(Vx_v,Vx_c[2:end-1,:],Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) .+ ∂_∂y(Vy_c[2:end-1,:],Vy_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) 
-                ∇v_i[:,1:end-1]   .=  ∂_∂x(Vx_c[:,2:end-1],Vx_v,Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) .+ ∂_∂y(Vy_v,Vy_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) 
-                ε̇xx_j .=  ∂_∂x(Vx_v,Vx_c[2:end-1,:],Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) .- 1.0/3.0*∇v_j
-                ε̇yy_j .=  ∂_∂y(Vy_c[2:end-1,:],Vy_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) .- 1.0/3.0*∇v_j
-                ε̇xy_j .= (∂_∂y(Vx_c[2:end-1,:],Vx_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) .+ ∂_∂x(Vy_v,Vy_c[2:end-1,:], Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) ) / 2.
-                ε̇xx_i[:,1:end-1] .=  ∂_∂x(Vx_c[:,2:end-1],Vx_v,Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) .- 1.0/3.0*∇v_i[:,1:end-1]
-                ε̇yy_i[:,1:end-1] .=  ∂_∂y(Vy_v,Vy_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) .- 1.0/3.0*∇v_i[:,1:end-1]
-                ε̇xy_i[:,1:end-1] .= (∂_∂y(Vx_v,Vx_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) .+ ∂_∂x(Vy_c[:,2:end-1],Vy_v, Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) ) / 2.
+                ∇v_j              .= ∂_∂x(Vx_v,Vx_c[2:end-1,:],Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) .+ ∂_∂y(Vy_c[2:end-1,:],Vy_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) 
+                ∇v_i[:,1:end-1]   .= ∂_∂x(Vx_c[:,2:end-1],Vx_v,Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) .+ ∂_∂y(Vy_v,Vy_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) 
+                ε̇xx_j             .= ∂_∂x(Vx_v,Vx_c[2:end-1,:],Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) .- 1.0/3.0*∇v_j
+                ε̇yy_j             .= ∂_∂y(Vy_c[2:end-1,:],Vy_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) .- 1.0/3.0*∇v_j
+                ε̇xy_j             .=(∂_∂y(Vx_c[2:end-1,:],Vx_v,Δξ,Δη,∂ξ∂yc_v,∂η∂yc_v) .+ ∂_∂x(Vy_v,Vy_c[2:end-1,:], Δξ,Δη,∂ξ∂xc_v,∂η∂xc_v) ) / 2.
+                ε̇xx_i[:,1:end-1]  .= ∂_∂x(Vx_c[:,2:end-1],Vx_v,Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) .- 1.0/3.0*∇v_i[:,1:end-1]
+                ε̇yy_i[:,1:end-1]  .= ∂_∂y(Vy_v,Vy_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) .- 1.0/3.0*∇v_i[:,1:end-1]
+                ε̇xy_i[:,1:end-1]  .=(∂_∂y(Vx_v,Vx_c[:,2:end-1],Δξ,Δη,∂ξ∂yc_c,∂η∂yc_c) .+ ∂_∂x(Vy_c[:,2:end-1],Vy_v, Δξ,Δη,∂ξ∂xc_c,∂η∂xc_c) ) / 2.
                 # @show ε̇xx_i[:, end]
                 τxx_j .= 2.0 .* ηs_j .* (ε̇xx_j + τxx0_j./(2.0.*ηe))
                 τxx_i .= 2.0 .* ηs_i .* (ε̇xx_i + τxx0_i./(2.0.*ηe))
@@ -344,70 +373,78 @@ end
                 τyy_i .= 2.0 .* ηs_i .* (ε̇yy_i + τyy0_i./(2.0.*ηe))
                 τxy_j .= 2.0 .* ηs_j .* (ε̇xy_j + τxy0_j./(2.0.*ηe))
                 τxy_i .= 2.0 .* ηs_i .* (ε̇xy_i + τxy0_i./(2.0.*ηe))
+                # if dynamic 
+                #     P_j                    .= P0_j            .- ηb_j           .*∇v_j           
+                #     P_i[:,1:end-1]         .= P0_i[:,1:end-1] .- ηb_i[:,1:end-1].*∇v_i[:,1:end-1]
+                # end
                 Rx_v[2:end-1,2:end-0] .= ∂_∂x(τxx_j[:,2:end-0],τxx_i[2:end-1,:],Δξ,Δη,∂ξ∂xv_v[2:end-1,2:end-0],∂η∂xv_v[2:end-1,2:end-0]) .+ ∂_∂y(τxy_i[2:end-1,:],τxy_j[:,2:end-0],Δξ,Δη,∂ξ∂yv_v[2:end-1,2:end-0],∂η∂yv_v[2:end-1,2:end-0]) .-  ∂_∂x(P_j[:,2:end-0],P_i[2:end-1,:],Δξ,Δη,∂ξ∂xv_v[2:end-1,2:end-0],∂η∂xv_v[2:end-1,2:end-0])
                 Rx_c                  .= ∂_∂x(τxx_i[:,1:end-1],τxx_j,           Δξ,Δη,∂ξ∂xv_c[2:end-1,2:end-1],∂η∂xv_c[2:end-1,2:end-1]) .+ ∂_∂y(τxy_j,τxy_i[:,1:end-1],           Δξ,Δη,∂ξ∂yv_c[2:end-1,2:end-1],∂η∂yv_c[2:end-1,2:end-1]) .-  ∂_∂x(P_i[:,1:end-1],P_j,           Δξ,Δη,∂ξ∂xv_c[2:end-1,2:end-1],∂η∂xv_c[2:end-1,2:end-1]) 
                 Ry_v[2:end-1,2:end-0] .= ∂_∂y(τyy_i[2:end-1,:],τyy_j[:,2:end-0],Δξ,Δη,∂ξ∂yv_v[2:end-1,2:end-0],∂η∂yv_v[2:end-1,2:end-0]) .+ ∂_∂x(τxy_j[:,2:end-0],τxy_i[2:end-1,:],Δξ,Δη,∂ξ∂xv_v[2:end-1,2:end-0],∂η∂xv_v[2:end-1,2:end-0]) .-  ∂_∂y(P_i[2:end-1,:],P_j[:,2:end-0],Δξ,Δη,∂ξ∂yv_v[2:end-1,2:end-0],∂η∂yv_v[2:end-1,2:end-0]) .+ ρ_v[2:end-1,2:end-0].*g
                 Ry_c                  .= ∂_∂y(τyy_j,τyy_i[:,1:end-1],           Δξ,Δη,∂ξ∂yv_c[2:end-1,2:end-1],∂η∂yv_c[2:end-1,2:end-1]) .+ ∂_∂x(τxy_i[:,1:end-1],τxy_j,           Δξ,Δη,∂ξ∂xv_c[2:end-1,2:end-1],∂η∂xv_c[2:end-1,2:end-1]) .-  ∂_∂y(P_j,P_i[:,1:end-1],           Δξ,Δη,∂ξ∂yv_c[2:end-1,2:end-1],∂η∂yv_c[2:end-1,2:end-1]) .+ ρ_c.*g
                 RP_j                  .= .-∇v_j            .- (P_j            .- P0_j)./ηb_j
                 RP_i                  .= .-∇v_i[:,1:end-1] .- (P_i[:,1:end-1] .- P0_i[:,1:end-1])./ηb_i[:,1:end-1]
-                # Calculate rate update --------------------------------------
-                dVxdτ_v .= (1-ρ) .* dVxdτ_v .+ Rx_v
-                dVydτ_v .= (1-ρ) .* dVydτ_v .+ Ry_v
-                dVxdτ_c .= (1-ρ) .* dVxdτ_c .+ Rx_c
-                dVydτ_c .= (1-ρ) .* dVydτ_c .+ Ry_c
-                # Update velocity and pressure -------------------------------
-                Vx_v[2:end-1,2:end-0] .+= Δτv_v ./ ρ .* dVxdτ_v[2:end-1,2:end-0]
-                Vy_v[2:end-1,2:end-0] .+= Δτv_v ./ ρ .* dVydτ_v[2:end-1,2:end-0]
-                Vx_c[2:end-1,2:end-1] .+= Δτv_c ./ ρ .* dVxdτ_c
-                Vy_c[2:end-1,2:end-1] .+= Δτv_c ./ ρ .* dVydτ_c
-                P_j                   .+= κΔτP_j .* RP_j
-                P_i[:,1:end-1]        .+= κΔτP_i .* RP_i
-                # Convergence check
-                if mod(iter, nout)==0 || iter==1
-                    norm_Rx = 0.5*( norm(Rx_v)/sqrt(length(Rx_v)) + norm(Rx_c)/sqrt(length(Rx_c)) )
-                    norm_Ry = 0.5*( norm(Ry_v)/sqrt(length(Ry_v)) + norm(Ry_c)/sqrt(length(Ry_c)) )
-                    norm_Rp = 0.5*( norm(RP_j)/sqrt(length(RP_j)) + norm(RP_i)/sqrt(length(RP_i)) )
-                    @printf("it = %03d, iter = %05d, nRx=%1.3e nRy=%1.3e nRp=%1.3e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
-                    if (isnan(norm_Rx) || isnan(norm_Ry) || isnan(norm_Rp)) error("NaN"); end
-                    if (norm_Rx<tol && norm_Ry<tol && norm_Rp<tol) break; end
+                if dynamic==false
+                    # Calculate rate update --------------------------------------
+                    dVxdτ_v .= (1-ρ) .* dVxdτ_v .+ Rx_v
+                    dVydτ_v .= (1-ρ) .* dVydτ_v .+ Ry_v
+                    dVxdτ_c .= (1-ρ) .* dVxdτ_c .+ Rx_c
+                    dVydτ_c .= (1-ρ) .* dVydτ_c .+ Ry_c
+                    # Update velocity and pressure -------------------------------
+                    Vx_v[2:end-1,2:end-0] .+= Δτv_v ./ ρ .* dVxdτ_v[2:end-1,2:end-0]
+                    Vy_v[2:end-1,2:end-0] .+= Δτv_v ./ ρ .* dVydτ_v[2:end-1,2:end-0]
+                    Vx_c[2:end-1,2:end-1] .+= Δτv_c ./ ρ .* dVxdτ_c
+                    Vy_c[2:end-1,2:end-1] .+= Δτv_c ./ ρ .* dVydτ_c
+                    P_j                   .+= κΔτP_j .* RP_j
+                    P_i[:,1:end-1]        .+= κΔτP_i .* RP_i
+                    # Convergence check
+                    if mod(iter, nout)==0 || iter==1
+                        norm_Rx = 0.5*( norm(Rx_v)/sqrt(length(Rx_v)) + norm(Rx_c)/sqrt(length(Rx_c)) )
+                        norm_Ry = 0.5*( norm(Ry_v)/sqrt(length(Ry_v)) + norm(Ry_c)/sqrt(length(Ry_c)) )
+                        norm_Rp = 0.5*( norm(RP_j)/sqrt(length(RP_j)) + norm(RP_i)/sqrt(length(RP_i)) )
+                        @printf("it = %03d, iter = %05d, nRx=%1.3e nRy=%1.3e nRp=%1.3e\n", it, iter, norm_Rx, norm_Ry, norm_Rp)
+                        if (isnan(norm_Rx) || isnan(norm_Ry) || isnan(norm_Rp)) error("NaN"); end
+                        if (norm_Rx<tol && norm_Ry<tol && norm_Rp<tol) break; end
+                    end
+                else
+                    Vx_v[2:end-1,2:end-0] .+= Δt ./ ρ .* Rx_v[2:end-1,2:end-0]
+                    Vy_v[2:end-1,2:end-0] .+= Δt ./ ρ .* Ry_v[2:end-1,2:end-0]
+                    Vx_c[2:end-1,2:end-1] .+= Δt ./ ρ .* Rx_c
+                    Vy_c[2:end-1,2:end-1] .+= Δt ./ ρ .* Ry_c
                 end
                 iter+=1; global itg=iter
             end
-            # # Plotting
-            # p1 = heatmap( xv_v, yv_v, Vx_v', aspect_ratio=1, xlims=(-Lx/2, Lx/2), ylims=(-Ly/2, Ly/2), c=:turbo, title="Vx_v")
-            # p2 = heatmap( xv_v, yv_v, Vy_v', aspect_ratio=1, xlims=(-Lx/2, Lx/2), ylims=(-Ly/2, Ly/2), c=:turbo, title="Vy_v")
-            # p3 = heatmap( xc_v, yc_v, P_j', aspect_ratio=1, xlims=(-Lx/2, Lx/2), ylims=(-Ly/2, Ly/2), c=:turbo, title="P_j")
-            # p4 = heatmap( xc_c, yc_c, P_i', aspect_ratio=1, xlims=(-Lx/2, Lx/2), ylims=(-Ly/2, Ly/2), c=:turbo, title="P_i")
-            # display(plot(p1, p2, p3, p4))
-            # Generate data
-            vertx = [  xv2_v[1:end-1,1:end-1][:]  xv2_v[2:end-0,1:end-1][:]  xv2_v[2:end-0,2:end-0][:]  xv2_v[1:end-1,2:end-0][:] ] 
-            verty = [  yv2_v[1:end-1,1:end-1][:]  yv2_v[2:end-0,1:end-1][:]  yv2_v[2:end-0,2:end-0][:]  yv2_v[1:end-1,2:end-0][:] ] 
-            sol   = ( vx=Vx_c[2:end-1,2:end-1][:], vy=Vy_c[2:end-1,2:end-1][:], p=∂η∂xvWESN(P_j, P_i[:,1:end-1])[:], η=∂η∂xvWESN(ηs_j, ηs_i[:,1:end-1])[:])
-            # sol   = ( vx=Rx_c[:,:][:], vy=Ry_c[:,:][:], p=∂η∂xvWESN(P_j, P_i[:,1:end-1])[:], η=∂η∂xvWESN(ηs_j, ηs_i[:,1:end-1])[:])
-
-            xc2   = ∂η∂xvWESN(xc2_v, xc2_c[:,1:end-1])[:] 
-            yc2   = ∂η∂xvWESN(yc2_v, yc2_c[:,1:end-1])[:]
-            PatchPlotMakie(vertx, verty, sol, minimum(xv2_v), maximum(xv2_v), minimum(yv2_v), maximum(yv2_v), xv2_v[:], yv2_v[:], xc2[:], yc2[:], write_fig=false)
-            
-            # file = matopen(string(@__DIR__,"/output_FS_topo.mat"), "w")
-            # write(file, "Vx_v", Vx_v)
-            # write(file, "Vx_c", Vx_c)
-            # write(file, "Vy_v", Vy_v)
-            # write(file, "Vy_c", Vy_c)
-            # write(file, "P_j", P_j)
-            # write(file, "P_i", P_i)
-            # write(file, "duNddudx",duNddudx)
-            # write(file, "duNddvdx",duNddvdx)
-            # write(file, "duNdP"   ,duNdP   )   
-            # write(file, "dvNddudx",dvNddudx)
-            # write(file, "dvNddvdx",dvNddvdx)
-            # write(file, "dvNdP"   ,dvNdP   )    
-            # write(file, "dkdx", Array(dkdx))
-            # write(file, "dkdy", Array(dkdy))
-            # write(file, "dedx", Array(dedx))
-            # write(file, "dedy", Array(dedy))
-            # write(file, "hx",   Array(h_x) )
-            # close(file)
+            if mod(it, nout_viz)==0 || it==1
+                # Plotting
+                # Generate data
+                @. τII_j = sqrt(0.5*(τxx_j^2 + τyy_j^2 + (τxx_j+τyy_j)^2) + τxy_j^2)
+                @. τII_i = sqrt(0.5*(τxx_i^2 + τyy_i^2 + (τxx_i+τyy_i)^2) + τxy_i^2)
+                vertx = [  xv2_v[1:end-1,1:end-1][:]  xv2_v[2:end-0,1:end-1][:]  xv2_v[2:end-0,2:end-0][:]  xv2_v[1:end-1,2:end-0][:] ] 
+                verty = [  yv2_v[1:end-1,1:end-1][:]  yv2_v[2:end-0,1:end-1][:]  yv2_v[2:end-0,2:end-0][:]  yv2_v[1:end-1,2:end-0][:] ] 
+                sol   = ( vx=Vx_c[2:end-1,2:end-1][:], vy=Vy_c[2:end-1,2:end-1][:], p=∂η∂xvWESN(P_j, P_i[:,1:end-1])[:], η=∂η∂xvWESN(ηs_j, ηs_i[:,1:end-1])[:], τII=∂η∂xvWESN(τII_j, τII_i[:,1:end-1])[:])
+                xc2   = ∂η∂xvWESN(xc2_v, xc2_c[:,1:end-1])[:] 
+                yc2   = ∂η∂xvWESN(yc2_v, yc2_c[:,1:end-1])[:]
+                PatchPlotMakie(vertx, verty, sol, minimum(xv2_v), maximum(xv2_v), minimum(yv2_v), maximum(yv2_v), xv2_v[:], yv2_v[:], xc2[:], yc2[:], write_fig=false)
+                
+                # file = matopen(string(@__DIR__,"/output_FS_topo.mat"), "w")
+                # write(file, "Vx_v", Vx_v)
+                # write(file, "Vx_c", Vx_c)
+                # write(file, "Vy_v", Vy_v)
+                # write(file, "Vy_c", Vy_c)
+                # write(file, "P_j", P_j)
+                # write(file, "P_i", P_i)
+                # write(file, "duNddudx",duNddudx)
+                # write(file, "duNddvdx",duNddvdx)
+                # write(file, "duNdP"   ,duNdP   )   
+                # write(file, "dvNddudx",dvNddudx)
+                # write(file, "dvNddvdx",dvNddvdx)
+                # write(file, "dvNdP"   ,dvNdP   )    
+                # write(file, "dkdx", Array(dkdx))
+                # write(file, "dkdy", Array(dkdy))
+                # write(file, "dedx", Array(dedx))
+                # write(file, "dedy", Array(dedy))
+                # write(file, "hx",   Array(h_x) )
+                # close(file)
+            end
             @show norm(P_i .- P0_i)./length(P0_i)
         end
     end
@@ -415,4 +452,4 @@ end
     return
 end
 
-Stokes2D_FSG()
+Wave2D_FSG()

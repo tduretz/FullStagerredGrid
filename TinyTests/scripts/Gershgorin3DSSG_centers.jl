@@ -57,14 +57,14 @@ end
 
 @tiny function Kernel_Gerschgorin2b!( τxyc, τxzc, τyzc, τxy, τxz, τyz)
     i, j, k = @indices
-    @inline isin(A) = checkbounds(Bool, A, i, j, k)
-     if isin(τxy)
+    # Free slip: Keep zero values where needed
+    @inbounds if i>1 && i<size(τxy,1) && j>1 && j<size(τxy,2) && k>=1 && k<=size(τxy,3)
         τxy[i,j,k] = 0.25*(τxyc[i,j,k+1] + τxyc[i+1,j,k+1] + τxyc[i,j+1,k+1] + τxyc[i+1,j+1,k+1])
     end
-     if isin(τxz)
+    @inbounds if i>1 && i<size(τxz,1) && j>=1 && j<=size(τxz,2) && k>1 && k<size(τxz,3) 
         τxz[i,j,k] = 0.25*(τxzc[i,j+1,k] + τxzc[i+1,j+1,k] + τxzc[i,j+1,k+1] + τxzc[i+1,j+1,k+1])
     end
-     if isin(τxz)
+    @inbounds if i>=1 && i<=size(τyz,1) && j>1 && j<size(τyz,2) && k>1 && k<size(τyz,3) 
         τyz[i,j,k] = 0.25*(τyzc[i+1,j,k] + τyzc[i+1,j+1,k] + τyzc[i+1,j,k+1] + τyzc[i+1,j+1,k+1])
     end
     return
